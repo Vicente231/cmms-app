@@ -1,53 +1,38 @@
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --bg:        #090909;
-  --bg2:       #111111;
-  --bg3:       #181818;
-  --bg4:       #202020;
-  --border:    #252525;
-  --border2:   #303030;
-  --text:      #e6e6e6;
-  --text2:     #888;
-  --text3:     #444;
-  --blue:      #388bfd;
-  --blue2:     #1a6fd4;
-  --blue-dim:  rgba(56,139,253,.1);
-  --blue-border: rgba(56,139,253,.25);
-  --red:       #f85149;
-  --green:     #3fb950;
-  --amber:     #d29922;
-  --purple:    #a371f7;
-  --radius:    5px;
-  --radius-lg: 9px;
-  --font:      'IBM Plex Sans', sans-serif;
-  --mono:      'IBM Plex Mono', monospace;
-  --trans:     0.15s ease;
-  --sidebar-w: 220px;
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
 }
 
-html, body, #root { height: 100%; }
-
-body {
-  font-family: var(--font);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
 }
-
-button { font-family: var(--font); cursor: pointer; border: none; outline: none; transition: var(--trans); }
-input, select, textarea { font-family: var(--font); font-size: 14px; outline: none; transition: var(--trans); }
-a { color: var(--blue); text-decoration: none; }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-@keyframes fadeIn  { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
-@keyframes slideIn { from { opacity:0; transform:translateX(-6px); } to { opacity:1; transform:translateX(0); } }
-@keyframes spin    { to { transform: rotate(360deg); } }
-
-.fade-in  { animation: fadeIn  .18s ease forwards; }
-.slide-in { animation: slideIn .18s ease forwards; }
