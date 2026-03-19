@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route } from 'react-router-dom'
 import { ProtectedRoute } from './ProtectedRoute'
 import { AppLayout } from '@/components/layout/AppLayout'
 import Login from '@/pages/Login'
@@ -24,7 +24,7 @@ import { OrganizationPage } from '@/pages/Settings/OrganizationPage'
 
 export default function AppRouter() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedRoute />}>
@@ -51,6 +51,6 @@ export default function AppRouter() {
           </Route>
         </Route>
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
