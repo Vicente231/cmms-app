@@ -5,7 +5,6 @@ import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { AssetCombobox } from '@/components/shared/AssetCombobox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -34,8 +33,7 @@ export function WorkOrdersPage() {
 
   const params = { page, limit: 20, search, ...(statusFilter ? { status: statusFilter } : {}) }
   const { data, isLoading } = useWorkOrders(params)
-  // Fetch all assets for the combobox (no pagination limit)
-  const { data: assets } = useAssets({ limit: 1000 })
+  const { data: assets } = useAssets({ limit: 100 })
   const createWO = useCreateWorkOrder()
   const updateWO = useUpdateWorkOrder()
   const deleteWO = useDeleteWorkOrder()
@@ -129,17 +127,12 @@ export function WorkOrdersPage() {
           </div>
           <div className="space-y-2">
             <Label>Asset</Label>
-            <Controller
-              control={control}
-              name="assetId"
-              render={({ field }) => (
-                <AssetCombobox
-                  assets={assets?.data || []}
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-              )}
-            />
+            <Controller control={control} name="assetId" render={({ field }) => (
+              <Select onValueChange={(v) => field.onChange(+v)} value={field.value?.toString()}>
+                <SelectTrigger><SelectValue placeholder="Select asset" /></SelectTrigger>
+                <SelectContent>{assets?.data.map((a) => <SelectItem key={a.id} value={a.id.toString()}>{a.name}</SelectItem>)}</SelectContent>
+              </Select>
+            )} />
           </div>
           <div className="space-y-2">
             <Label>Priority</Label>
