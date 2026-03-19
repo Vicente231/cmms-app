@@ -24,7 +24,7 @@ import { OrganizationPage } from '@/pages/Settings/OrganizationPage'
 
 export default function AppRouter() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/cmms-app">
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedRoute />}>

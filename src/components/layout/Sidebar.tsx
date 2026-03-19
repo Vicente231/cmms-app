@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Wrench, Calendar, Box, ShoppingCart, MapPin,
   Users, Settings, ChevronDown, Building2, Shield, Tag, AlertTriangle,
-  TruckIcon, ClipboardList, BarChart3, X
+  TruckIcon, ClipboardList, BarChart3, X, ChevronLeft, ChevronRight
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -50,9 +50,11 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   open: boolean
   onClose: () => void
+  collapsed: boolean
+  onToggleCollapse: () => void
 }
 
-function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }) {
+function NavItemComponent({ item, depth = 0, collapsed }: { item: NavItem; depth?: number; collapsed: boolean }) {
   const [expanded, setExpanded] = useState(true)
   const Icon = item.icon
 
@@ -61,19 +63,21 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
       <div>
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+          className={cn(
+            'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
+            collapsed && 'lg:justify-center lg:px-2'
+          )}
+          title={collapsed ? item.label : undefined}
         >
-          <Icon className="h-4 w-4" />
-          <span className="flex-1 text-left">{item.label}</span>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', expanded && 'rotate-180')} />
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className={cn('flex-1 text-left', collapsed && 'lg:hidden')}>{item.label}</span>
+          <ChevronDown className={cn('h-4 w-4 transition-transform shrink-0', expanded && 'rotate-180', collapsed && 'lg:hidden')} />
         </button>
-        {expanded && (
-          <div className="ml-4 mt-1 space-y-1">
-            {item.children.map((child) => (
-              <NavItemComponent key={child.href} item={child} depth={depth + 1} />
-            ))}
-          </div>
-        )}
+        <div className={cn('ml-4 mt-1 space-y-1', (!expanded || collapsed) && 'lg:hidden', !expanded && 'hidden')}>
+          {item.children.map((child) => (
+            <NavItemComponent key={child.href} item={child} depth={depth + 1} collapsed={collapsed} />
+          ))}
+        </div>
       </div>
     )
   }
@@ -85,19 +89,21 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          collapsed && 'lg:justify-center lg:px-2',
           isActive
             ? 'bg-primary text-primary-foreground'
             : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
         )
       }
+      title={item.label}
     >
-      <Icon className="h-4 w-4" />
-      {item.label}
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className={cn(collapsed && 'lg:hidden')}>{item.label}</span>
     </NavLink>
   )
 }
 
-export function Sidebar({ open, onClose }: SidebarProps) {
+export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
   return (
     <>
       {/* Mobile backdrop */}
@@ -108,23 +114,31 @@ export function Sidebar({ open, onClose }: SidebarProps) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-background transition-transform duration-300 lg:static lg:translate-x-0',
-          open ? 'translate-x-0' : '-translate-x-full'
+          'fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-background transition-all duration-300 lg:static lg:translate-x-0',
+          open ? 'translate-x-0' : '-translate-x-full',
+          collapsed && 'lg:w-16'
         )}
       >
+        {/* Header */}
         <div className="flex h-16 items-center justify-between border-b px-4">
-          <div className="flex items-center gap-2">
+          <div className={cn('flex items-center gap-2', collapsed && 'lg:hidden')}>
             <Wrench className="h-6 w-6 text-primary" />
             <span className="text-lg font-bold">CMMS</span>
           </div>
-          <Button variant="ghost" size="icon" className="lg:hidden" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
+          <Wrench className={cn('h-6 w-6 text-primary hidden', collapsed && 'lg:block')} />
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="lg:hidden" onClick={onClose}>
+              <X className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="hidden lg:flex" onClick={onToggleCollapse}>
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        <nav className={cn('flex-1 overflow-y-auto p-4 space-y-1', collapsed && 'lg:px-2')}>
           {navItems.map((item) => (
-            <NavItemComponent key={item.href || item.label} item={item} />
+            <NavItemComponent key={item.href || item.label} item={item} collapsed={collapsed} />
           ))}
         </nav>
       </aside>

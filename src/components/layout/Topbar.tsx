@@ -1,6 +1,6 @@
 import { Menu, Bell, LogOut, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate } from 'react-router-dom'
-import api from '@/lib/axios'
+import { gasPost } from '@/lib/api'
 
 interface TopbarProps {
   onMenuToggle: () => void
@@ -22,12 +22,12 @@ export function Topbar({ onMenuToggle }: TopbarProps) {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
-    try { await api.post('/auth/logout') } catch { /* ignore */ }
+    try { await gasPost('logout') } catch { /* ignore */ }
     logout()
     navigate('/login')
   }
 
-  const initials = user ? `${user.firstName[0]}${user.lastName[0]}`.toUpperCase() : 'U'
+  const initials = user?.avatar || user?.name?.substring(0, 2).toUpperCase() || 'U'
 
   return (
     <header className="flex h-16 items-center border-b bg-background px-4 gap-4">
@@ -45,7 +45,6 @@ export function Topbar({ onMenuToggle }: TopbarProps) {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-9 w-9 rounded-full">
             <Avatar className="h-9 w-9">
-              <AvatarImage src={user?.avatarUrl} alt={user?.firstName} />
               <AvatarFallback>{initials}</AvatarFallback>
             </Avatar>
           </Button>
@@ -53,7 +52,7 @@ export function Topbar({ onMenuToggle }: TopbarProps) {
         <DropdownMenuContent className="w-56" align="end" forceMount>
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">{user?.firstName} {user?.lastName}</p>
+              <p className="text-sm font-medium leading-none">{user?.name}</p>
               <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
             </div>
           </DropdownMenuLabel>

@@ -1,15 +1,53 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
-import type { WorkOrder, PaginatedResponse, ApiResponse } from '@/types'
+import { gasGet, gasPost } from '@/lib/api'
+import type { GASWorkOrder } from '@/lib/api'
+import type { WorkOrder, WoStatus, WoPriority, PaginatedResponse } from '@/types'
 
 const KEY = 'work-orders'
 
-export const useWorkOrders = (params?: Record<string, string | number>) =>
+function idNum(wo_id: string): number {
+  return parseInt(wo_id?.replace('WO-', '') || '0', 10) || 0
+}
+
+function toWoId(id: number): string {
+  return 'WO-' + String(id).padStart(6, '0')
+}
+
+function mapWo(wo: GASWorkOrder): WorkOrder {
+  return {
+    id: idNum(wo.wo_id),
+    orgId: 0,
+    woNumber: wo.wo_id,
+    title: wo.description || wo.wo_id,
+    description: wo.problem_description || wo.description,
+    status: (wo.status?.toLowerCase() as WoStatus) || 'open',
+    priority: (wo.priority?.toLowerCase() as WoPriority) || 'medium',
+    requestedDate: '',
+    dueDate: wo.due_date || undefined,
+    estimatedHours: wo.estimated_duration ? parseFloat(wo.estimated_duration) : undefined,
+    actualHours: wo.actual_duration ? parseFloat(wo.actual_duration) : undefined,
+    totalCost: 0,
+    requiresDowntime: false,
+    assetId: wo.asset_id ? parseInt(wo.asset_id.replace('AST-', '') || '0', 10) : undefined,
+    asset: wo.asset_id ? { id: 0, name: wo.asset_id, assetTag: wo.asset_id } : undefined,
+    createdAt: '',
+    updatedAt: '',
+  }
+}
+
+function toPaged(items: WorkOrder[]): PaginatedResponse<WorkOrder> {
+  return {
+    data: items,
+    pagination: { total: items.length, page: 1, limit: items.length, totalPages: 1, hasNext: false, hasPrev: false },
+  }
+}
+
+export const useWorkOrders = (_params?: Record<string, string | number>) =>
   useQuery({
-    queryKey: [KEY, params],
+    queryKey: [KEY],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<PaginatedResponse<WorkOrder>>>('/work-orders', { params })
-      return data.data
+      const rows = await gasGet<GASWorkOrder[]>('workOrders')
+      return toPaged(rows.map(mapWo))
     },
   })
 
@@ -17,8 +55,9 @@ export const useWorkOrder = (id: number) =>
   useQuery({
     queryKey: [KEY, id],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<WorkOrder>>(`/work-orders/${id}`)
-      return data.data
+      const rows = await gasGet<GASWorkOrder[]>('workOrders')
+      const found = rows.find((w) => idNum(w.wo_id) === id)
+      return found ? mapWo(found) : null
     },
     enabled: !!id,
   })
@@ -26,10 +65,17 @@ export const useWorkOrder = (id: number) =>
 export const useCreateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<WorkOrder>) => {
-      const { data } = await api.post<ApiResponse<WorkOrder>>('/work-orders', body)
-      return data.data
-    },
+    mutationFn: async (body: Partial<WorkOrder>) =>
+      gasPost<{ success: boolean; wo_id: string }>('createWorkOrder', {
+        wo_type: 'CM',
+        asset_id: body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '',
+        priority: body.priority?.toUpperCase() || 'MEDIUM',
+        status: body.status?.toUpperCase() || 'OPEN',
+        due_date: body.dueDate || '',
+        description: body.title || body.description || '',
+        problem_description: body.description || '',
+        estimated_duration: body.estimatedHours ? String(body.estimatedHours) : '',
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -37,10 +83,19 @@ export const useCreateWorkOrder = () => {
 export const useUpdateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<WorkOrder> & { id: number }) => {
-      const { data } = await api.put<ApiResponse<WorkOrder>>(`/work-orders/${id}`, body)
-      return data.data
-    },
+    mutationFn: async ({ id, ...body }: Partial<WorkOrder> & { id: number }) =>
+      gasPost<{ success: boolean }>('updateWorkOrder', {
+        wo_id: toWoId(id),
+        updates: {
+          priority: body.priority?.toUpperCase(),
+          status: body.status?.toUpperCase(),
+          due_date: body.dueDate,
+          description: body.title || body.description,
+          problem_description: body.description,
+          estimated_duration: body.estimatedHours ? String(body.estimatedHours) : undefined,
+          actual_duration: body.actualHours ? String(body.actualHours) : undefined,
+        },
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -48,9 +103,8 @@ export const useUpdateWorkOrder = () => {
 export const useDeleteWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/work-orders/${id}`)
-    },
+    mutationFn: (id: number) =>
+      gasPost<{ success: boolean }>('deleteWorkOrder', { wo_id: toWoId(id) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -59,7 +113,20 @@ export const useDashboardStats = () =>
   useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const { data } = await api.get('/work-orders/dashboard')
-      return data.data
+      const wos = await gasGet<GASWorkOrder[]>('workOrders')
+      const statuses = ['OPEN', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']
+      const byStatus = statuses.map((s) => ({
+        status: s.toLowerCase(),
+        _count: { status: wos.filter((w) => w.status === s).length },
+      }))
+      const open = wos.filter((w) => w.status === 'OPEN').length
+      const overdue = wos.filter(
+        (w) =>
+          w.status !== 'COMPLETED' &&
+          w.status !== 'CANCELLED' &&
+          w.due_date &&
+          new Date(w.due_date) < new Date()
+      ).length
+      return { open, overdue, byStatus }
     },
   })

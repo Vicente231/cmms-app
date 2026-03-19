@@ -1,35 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { useMutation } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
-import type { Organization, ApiResponse } from '@/types'
+import type { Organization } from '@/types'
 import { useForm } from 'react-hook-form'
 import { useEffect } from 'react'
-import { useAuthStore } from '@/store/authStore'
 
 export function OrganizationPage() {
   const { toast } = useToast()
-  const qc = useQueryClient()
-  const { user } = useAuthStore()
 
-  const { data: org, isLoading } = useQuery({
-    queryKey: ['organization', user?.orgId],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<Organization>>(`/organizations/${user?.orgId}`)
-      return data.data
-    },
-    enabled: !!user?.orgId,
-  })
+  // Organization settings are not stored in the Google Sheets backend
+  const isLoading = false
+  const org = null
 
   const update = useMutation({
-    mutationFn: async (body: Partial<Organization>) => {
-      const { data } = await api.put(`/organizations/${user?.orgId}`, body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['organization'] }),
+    mutationFn: async (_body: Partial<Organization>) => ({}),
   })
 
   const { register, handleSubmit, reset } = useForm<Partial<Organization>>()

@@ -1,56 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
-import type { Part, PaginatedResponse, ApiResponse } from '@/types'
+import type { Part, PaginatedResponse } from '@/types'
 
-const KEY = 'parts'
+const empty = (): PaginatedResponse<Part> => ({
+  data: [],
+  pagination: { total: 0, page: 1, limit: 0, totalPages: 0, hasNext: false, hasPrev: false },
+})
 
-export const useParts = (params?: Record<string, string | number | boolean>) =>
-  useQuery({
-    queryKey: [KEY, params],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<PaginatedResponse<Part>>>('/parts', { params })
-      return data.data
-    },
-  })
+export const useParts = (_params?: Record<string, string | number | boolean>) =>
+  useQuery({ queryKey: ['parts'], queryFn: async () => empty() })
 
-export const usePart = (id: number) =>
-  useQuery({
-    queryKey: [KEY, id],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<Part>>(`/parts/${id}`)
-      return data.data
-    },
-    enabled: !!id,
-  })
+export const usePart = (_id: number) =>
+  useQuery({ queryKey: ['parts', _id], queryFn: async () => null, enabled: false })
 
 export const useCreatePart = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<Part>) => {
-      const { data } = await api.post<ApiResponse<Part>>('/parts', body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Part>) => ({} as Part),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['parts'] }),
   })
 }
 
 export const useUpdatePart = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<Part> & { id: number }) => {
-      const { data } = await api.put<ApiResponse<Part>>(`/parts/${id}`, body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Part> & { id: number }) => ({} as Part),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['parts'] }),
   })
 }
 
 export const useDeletePart = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/parts/${id}`)
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_id: number) => {},
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['parts'] }),
   })
 }

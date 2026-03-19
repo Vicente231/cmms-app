@@ -1,56 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
-import type { Location, PaginatedResponse, ApiResponse } from '@/types'
+import type { Location, PaginatedResponse } from '@/types'
 
-const KEY = 'locations'
+const empty = (): PaginatedResponse<Location> => ({
+  data: [],
+  pagination: { total: 0, page: 1, limit: 0, totalPages: 0, hasNext: false, hasPrev: false },
+})
 
-export const useLocations = (params?: Record<string, string | number>) =>
-  useQuery({
-    queryKey: [KEY, params],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<PaginatedResponse<Location>>>('/locations', { params })
-      return data.data
-    },
-  })
+export const useLocations = (_params?: Record<string, string | number>) =>
+  useQuery({ queryKey: ['locations'], queryFn: async () => empty() })
 
-export const useLocation = (id: number) =>
-  useQuery({
-    queryKey: [KEY, id],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<Location>>(`/locations/${id}`)
-      return data.data
-    },
-    enabled: !!id,
-  })
+export const useLocation = (_id: number) =>
+  useQuery({ queryKey: ['locations', _id], queryFn: async () => null, enabled: false })
 
 export const useCreateLocation = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<Location>) => {
-      const { data } = await api.post<ApiResponse<Location>>('/locations', body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Location>) => ({} as Location),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['locations'] }),
   })
 }
 
 export const useUpdateLocation = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<Location> & { id: number }) => {
-      const { data } = await api.put<ApiResponse<Location>>(`/locations/${id}`, body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Location> & { id: number }) => ({} as Location),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['locations'] }),
   })
 }
 
 export const useDeleteLocation = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/locations/${id}`)
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_id: number) => {},
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['locations'] }),
   })
 }

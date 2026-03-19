@@ -1,56 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
-import type { Vendor, PaginatedResponse, ApiResponse } from '@/types'
+import type { Vendor, PaginatedResponse } from '@/types'
 
-const KEY = 'vendors'
+const empty = (): PaginatedResponse<Vendor> => ({
+  data: [],
+  pagination: { total: 0, page: 1, limit: 0, totalPages: 0, hasNext: false, hasPrev: false },
+})
 
-export const useVendors = (params?: Record<string, string | number>) =>
-  useQuery({
-    queryKey: [KEY, params],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<PaginatedResponse<Vendor>>>('/vendors', { params })
-      return data.data
-    },
-  })
+export const useVendors = (_params?: Record<string, string | number>) =>
+  useQuery({ queryKey: ['vendors'], queryFn: async () => empty() })
 
-export const useVendor = (id: number) =>
-  useQuery({
-    queryKey: [KEY, id],
-    queryFn: async () => {
-      const { data } = await api.get<ApiResponse<Vendor>>(`/vendors/${id}`)
-      return data.data
-    },
-    enabled: !!id,
-  })
+export const useVendor = (_id: number) =>
+  useQuery({ queryKey: ['vendors', _id], queryFn: async () => null, enabled: false })
 
 export const useCreateVendor = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<Vendor>) => {
-      const { data } = await api.post<ApiResponse<Vendor>>('/vendors', body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Vendor>) => ({} as Vendor),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),
   })
 }
 
 export const useUpdateVendor = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<Vendor> & { id: number }) => {
-      const { data } = await api.put<ApiResponse<Vendor>>(`/vendors/${id}`, body)
-      return data.data
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_body: Partial<Vendor> & { id: number }) => ({} as Vendor),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),
   })
 }
 
 export const useDeleteVendor = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (id: number) => {
-      await api.delete(`/vendors/${id}`)
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+    mutationFn: async (_id: number) => {},
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),
   })
 }
