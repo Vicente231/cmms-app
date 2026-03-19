@@ -5,10 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CMMS — Maintenance Management</title>
-    <script type="module" crossorigin src="/cmms-app/assets/index-Bo8KSPRq.js"></script>
+    <script type="module" crossorigin src="/cmms-app/assets/index-CKiljgo3.js"></script>
     <link rel="stylesheet" crossorigin href="/cmms-app/assets/index-92goZ3cK.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"></div>
+    <script>
+      // GitHub Pages SPA redirect: restore path stored by 404.html
+      var redirect = sessionStorage.getItem('redirect');
+      if (redirect) {
+        sessionStorage.removeItem('redirect');
+        history.replaceState(null, '', redirect);
+      }
+    </script>
   </body>
 </html>
