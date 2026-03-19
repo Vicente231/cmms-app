@@ -31,7 +31,7 @@ export function WorkOrdersPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editWO, setEditWO] = useState<WorkOrder | null>(null)
 
-  const params = { page, limit: 20, search, ...(statusFilter ? { status: statusFilter } : {}) }
+  const params = { page, limit: 20, search, ...(statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {}) }
   const { data, isLoading } = useWorkOrders(params)
   const { data: assets } = useAssets({ limit: 100 })
   const createWO = useCreateWorkOrder()
@@ -112,7 +112,7 @@ export function WorkOrdersPage() {
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-40"><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All statuses</SelectItem>
+              <SelectItem value="all">All statuses</SelectItem>
               {statuses.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
             </SelectContent>
           </Select>

@@ -112,3 +112,13 @@ export interface GASAssetType {
   icon: string
   color: string
 }
+
+export interface GASAssetTypeSchema {
+  type_code: string
+  field_key: string
+  label: string
+  data_type: string
+  unit: string
+  required: boolean
+  options: string[]
+}
