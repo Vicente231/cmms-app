@@ -44,7 +44,7 @@ export const usePurchaseOrders = (_params?: Record<string, string | number>) =>
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASPurchaseOrder[]>('purchaseOrders')
-      return toPaged(rows.map(mapPO))
+      return toPaged(Array.isArray(rows) ? rows.map(mapPO) : [])
     },
   })
 

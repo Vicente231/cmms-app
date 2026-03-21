@@ -45,7 +45,7 @@ export const useParts = (_params?: Record<string, string | number | boolean>) =>
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASPart[]>('parts')
-      return toPaged(rows.map(mapPart))
+      return toPaged(Array.isArray(rows) ? rows.map(mapPart) : [])
     },
   })
 

@@ -47,7 +47,7 @@ export function PartsCategoriesPage() {
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASPartsCategory[]>('partsCategories')
-      return rows.map(mapCat)
+      return Array.isArray(rows) ? rows.map(mapCat) : []
     },
   })
 

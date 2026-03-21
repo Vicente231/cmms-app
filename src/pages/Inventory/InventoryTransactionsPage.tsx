@@ -50,7 +50,7 @@ export function InventoryTransactionsPage() {
     queryKey: ['inventory-transactions'],
     queryFn: async () => {
       const rows = await gasGet<GASInventoryTransaction[]>('inventoryTransactions')
-      return rows.map(mapTx)
+      return Array.isArray(rows) ? rows.map(mapTx) : []
     },
   })
 

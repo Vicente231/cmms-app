@@ -47,7 +47,7 @@ export function TeamsPage() {
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASTeam[]>('teams')
-      return rows.map(mapTeam)
+      return Array.isArray(rows) ? rows.map(mapTeam) : []
     },
   })
 

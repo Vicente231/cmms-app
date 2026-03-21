@@ -41,7 +41,7 @@ export const useLocations = (_params?: Record<string, string | number>) =>
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASLocation[]>('locations')
-      return toPaged(rows.map(mapLocation))
+      return toPaged(Array.isArray(rows) ? rows.map(mapLocation) : [])
     },
   })
 

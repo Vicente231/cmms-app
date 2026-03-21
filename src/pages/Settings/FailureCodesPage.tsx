@@ -48,7 +48,7 @@ export function FailureCodesPage() {
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASFailureCode[]>('failureCodes')
-      return rows.map(mapCode)
+      return Array.isArray(rows) ? rows.map(mapCode) : []
     },
   })
 

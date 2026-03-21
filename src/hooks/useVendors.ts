@@ -43,7 +43,7 @@ export const useVendors = (_params?: Record<string, string | number>) =>
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASVendor[]>('vendors')
-      return toPaged(rows.map(mapVendor))
+      return toPaged(Array.isArray(rows) ? rows.map(mapVendor) : [])
     },
   })
 

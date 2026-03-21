@@ -47,7 +47,7 @@ export function WorkOrderTypesPage() {
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASWorkOrderType[]>('workOrderTypes')
-      return rows.map(mapType)
+      return Array.isArray(rows) ? rows.map(mapType) : []
     },
   })
 
