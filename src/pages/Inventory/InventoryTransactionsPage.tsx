@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { gasGet } from '@/lib/api'
+import type { GASInventoryTransaction } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { Badge } from '@/components/ui/badge'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { InventoryTransaction, PaginatedResponse, ApiResponse } from '@/types'
-import { format } from 'date-fns'
+import type { InventoryTransaction, TransactionType } from '@/types'
+import { format, parseISO, isValid } from 'date-fns'
 import { cn } from '@/lib/utils'
 
 const txTypeColors: Record<string, string> = {
@@ -16,20 +17,51 @@ const txTypeColors: Record<string, string> = {
   transfer: 'bg-purple-100 text-purple-800',
 }
 
+function mapTx(t: GASInventoryTransaction, idx: number): InventoryTransaction {
+  return {
+    id: idx + 1,
+    partId: 0,
+    part: t.part_name ? { id: 0, name: t.part_name, partNumber: t.part_number || undefined } : undefined,
+    transactionType: (t.transaction_type?.toLowerCase() as TransactionType) || 'adjustment',
+    quantity: parseFloat(t.quantity || '0') || 0,
+    unitCost: parseFloat(t.unit_cost || '0') || undefined,
+    balanceAfter: parseFloat(t.balance_after || '0') || 0,
+    performer: t.performed_by ? { id: 0, firstName: t.performed_by, lastName: '' } : undefined,
+    referenceNumber: t.reference_number || undefined,
+    notes: t.notes || undefined,
+    transactionDate: t.transaction_date || new Date().toISOString(),
+    createdAt: t.transaction_date || '',
+  }
+}
+
+function safeFormat(dateStr: string): string {
+  try {
+    const d = parseISO(dateStr)
+    return isValid(d) ? format(d, 'MMM d, yyyy HH:mm') : dateStr
+  } catch {
+    return dateStr
+  }
+}
+
 export function InventoryTransactionsPage() {
-  const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['inventory-transactions', page],
+  const { data: transactions, isLoading } = useQuery({
+    queryKey: ['inventory-transactions'],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<PaginatedResponse<InventoryTransaction>>>('/inventory-transactions', { params: { page, limit: 20 } })
-      return data.data
+      const rows = await gasGet<GASInventoryTransaction[]>('inventoryTransactions')
+      return rows.map(mapTx)
     },
   })
 
+  const filtered = (transactions || []).filter(t =>
+    !search ||
+    t.part?.name?.toLowerCase().includes(search.toLowerCase()) ||
+    t.referenceNumber?.toLowerCase().includes(search.toLowerCase())
+  )
+
   const columns: ColumnDef<InventoryTransaction>[] = [
-    { accessorKey: 'transactionDate', header: 'Date', cell: ({ row }) => format(new Date(row.original.transactionDate), 'MMM d, yyyy HH:mm') },
+    { accessorKey: 'transactionDate', header: 'Date', cell: ({ row }) => safeFormat(row.original.transactionDate) },
     { accessorKey: 'part', header: 'Part', cell: ({ row }) => (
       <div>
         <p className="font-medium text-sm">{row.original.part?.name}</p>
@@ -45,7 +77,7 @@ export function InventoryTransactionsPage() {
       </span>
     )},
     { accessorKey: 'balanceAfter', header: 'Balance', cell: ({ row }) => <span className="font-medium">{Number(row.original.balanceAfter)}</span> },
-    { accessorKey: 'performer', header: 'By', cell: ({ row }) => row.original.performer ? `${row.original.performer.firstName} ${row.original.performer.lastName}` : '-' },
+    { accessorKey: 'performer', header: 'By', cell: ({ row }) => row.original.performer ? `${row.original.performer.firstName} ${row.original.performer.lastName}`.trim() : '-' },
     { accessorKey: 'referenceNumber', header: 'Reference', cell: ({ row }) => row.original.referenceNumber || '-' },
     { accessorKey: 'notes', header: 'Notes', cell: ({ row }) => <span className="text-sm text-muted-foreground max-w-xs truncate block">{row.original.notes || '-'}</span> },
   ]
@@ -53,7 +85,7 @@ export function InventoryTransactionsPage() {
   return (
     <div className="space-y-4">
       <div><h1 className="text-2xl font-bold">Inventory Transactions</h1><p className="text-muted-foreground">Read-only ledger of all inventory movements</p></div>
-      <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} searchValue={search} onSearchChange={setSearch} page={page} totalPages={data?.pagination.totalPages} onPageChange={setPage} total={data?.pagination.total} />
+      <DataTable columns={columns} data={filtered} isLoading={isLoading} searchValue={search} onSearchChange={setSearch} total={filtered.length} />
     </div>
   )
 }

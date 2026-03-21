@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { gasGet, gasPost } from '@/lib/api'
+import type { GASFailureCode } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -9,9 +10,31 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { FailureCode, ApiResponse } from '@/types'
+import type { FailureCode } from '@/types'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
+
+const KEY = 'failure-codes'
+
+function idNum(code_id: string): number {
+  return parseInt(code_id?.replace('FC-', '') || '0', 10) || 0
+}
+
+function toCodeId(id: number): string {
+  return 'FC-' + String(id).padStart(4, '0')
+}
+
+function mapCode(c: GASFailureCode): FailureCode {
+  return {
+    id: idNum(c.code_id),
+    orgId: 0,
+    code: c.code,
+    description: c.description || undefined,
+    category: c.category || undefined,
+    createdAt: '',
+    updatedAt: '',
+  }
+}
 
 export function FailureCodesPage() {
   const { toast } = useToast()
@@ -21,10 +44,37 @@ export function FailureCodesPage() {
   const [editFC, setEditFC] = useState<FailureCode | null>(null)
   const [search, setSearch] = useState('')
 
-  const { data: codes, isLoading } = useQuery({ queryKey: ['failure-codes'], queryFn: async () => { const { data } = await api.get<ApiResponse<FailureCode[]>>('/failure-codes'); return data.data } })
-  const create = useMutation({ mutationFn: async (body: Partial<FailureCode>) => { const { data } = await api.post('/failure-codes', body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['failure-codes'] }) })
-  const update = useMutation({ mutationFn: async ({ id, ...body }: Partial<FailureCode> & { id: number }) => { const { data } = await api.put(`/failure-codes/${id}`, body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['failure-codes'] }) })
-  const remove = useMutation({ mutationFn: async (id: number) => { await api.delete(`/failure-codes/${id}`) }, onSuccess: () => qc.invalidateQueries({ queryKey: ['failure-codes'] }) })
+  const { data: codes, isLoading } = useQuery({
+    queryKey: [KEY],
+    queryFn: async () => {
+      const rows = await gasGet<GASFailureCode[]>('failureCodes')
+      return rows.map(mapCode)
+    },
+  })
+
+  const create = useMutation({
+    mutationFn: async (body: Partial<FailureCode>) =>
+      gasPost<{ success: boolean }>('createFailureCode', {
+        code: body.code || '',
+        description: body.description || '',
+        category: body.category || '',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const update = useMutation({
+    mutationFn: async ({ id, ...body }: Partial<FailureCode> & { id: number }) =>
+      gasPost<{ success: boolean }>('updateFailureCode', {
+        code_id: toCodeId(id),
+        updates: { code: body.code, description: body.description, category: body.category },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: number) => gasPost<{ success: boolean }>('deleteFailureCode', { code_id: toCodeId(id) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
 
   const { register, handleSubmit, reset } = useForm<Partial<FailureCode>>()
 

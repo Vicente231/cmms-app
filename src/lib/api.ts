@@ -122,3 +122,92 @@ export interface GASAssetTypeSchema {
   required: boolean
   options: string[]
 }
+
+export interface GASLocation {
+  location_id: string
+  name: string
+  parent: string
+  address: string
+  city: string
+  state: string
+  country: string
+}
+
+export interface GASVendor {
+  vendor_id: string
+  name: string
+  contact_name: string
+  email: string
+  phone: string
+  address: string
+  website: string
+  payment_terms: string
+  notes: string
+}
+
+export interface GASPart {
+  part_id: string
+  name: string
+  part_number: string
+  category: string
+  unit_of_measure: string
+  unit_cost: string
+  quantity_on_hand: string
+  minimum_quantity: string
+  reorder_quantity: string
+  storage_location: string
+  preferred_vendor: string
+}
+
+export interface GASPurchaseOrder {
+  po_id: string
+  vendor: string
+  status: string
+  order_date: string
+  expected_date: string
+  notes: string
+  total: string
+}
+
+export interface GASTeam {
+  team_id: string
+  name: string
+  description: string
+  members: string
+}
+
+export interface GASWorkOrderType {
+  type_id: string
+  name: string
+  color: string
+  description: string
+}
+
+export interface GASFailureCode {
+  code_id: string
+  code: string
+  description: string
+  category: string
+}
+
+export interface GASPartsCategory {
+  category_id: string
+  name: string
+  description: string
+  parent: string
+}
+
+export interface GASInventoryTransaction {
+  tx_id: string
+  part_id: string
+  part_name: string
+  part_number: string
+  transaction_type: string
+  quantity: string
+  unit_cost: string
+  balance_after: string
+  performed_by: string
+  reference_number: string
+  notes: string
+  transaction_date: string
+}

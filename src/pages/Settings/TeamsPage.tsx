@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { gasGet, gasPost } from '@/lib/api'
+import type { GASTeam } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -9,9 +10,31 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { Team, ApiResponse } from '@/types'
+import type { Team } from '@/types'
 import { Pencil, Trash2, Users } from 'lucide-react'
 import { useForm } from 'react-hook-form'
+
+const KEY = 'teams'
+
+function idNum(team_id: string): number {
+  return parseInt(team_id?.replace('T-', '') || '0', 10) || 0
+}
+
+function toTeamId(id: number): string {
+  return 'T-' + String(id).padStart(3, '0')
+}
+
+function mapTeam(t: GASTeam): Team {
+  return {
+    id: idNum(t.team_id),
+    orgId: 0,
+    name: t.name,
+    description: t.description || undefined,
+    members: [],
+    createdAt: '',
+    updatedAt: '',
+  }
+}
 
 export function TeamsPage() {
   const { toast } = useToast()
@@ -20,10 +43,33 @@ export function TeamsPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editTeam, setEditTeam] = useState<Team | null>(null)
 
-  const { data: teams, isLoading } = useQuery({ queryKey: ['teams'], queryFn: async () => { const { data } = await api.get<ApiResponse<Team[]>>('/teams'); return data.data } })
-  const create = useMutation({ mutationFn: async (body: Partial<Team>) => { const { data } = await api.post('/teams', body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }) })
-  const update = useMutation({ mutationFn: async ({ id, ...body }: Partial<Team> & { id: number }) => { const { data } = await api.put(`/teams/${id}`, body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }) })
-  const remove = useMutation({ mutationFn: async (id: number) => { await api.delete(`/teams/${id}`) }, onSuccess: () => qc.invalidateQueries({ queryKey: ['teams'] }) })
+  const { data: teams, isLoading } = useQuery({
+    queryKey: [KEY],
+    queryFn: async () => {
+      const rows = await gasGet<GASTeam[]>('teams')
+      return rows.map(mapTeam)
+    },
+  })
+
+  const create = useMutation({
+    mutationFn: async (body: Partial<Team>) =>
+      gasPost<{ success: boolean }>('createTeam', { name: body.name || '', description: body.description || '' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const update = useMutation({
+    mutationFn: async ({ id, ...body }: Partial<Team> & { id: number }) =>
+      gasPost<{ success: boolean }>('updateTeam', {
+        team_id: toTeamId(id),
+        updates: { name: body.name, description: body.description },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: number) => gasPost<{ success: boolean }>('deleteTeam', { team_id: toTeamId(id) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
 
   const { register, handleSubmit, reset } = useForm<Partial<Team>>()
 

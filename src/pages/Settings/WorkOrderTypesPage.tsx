@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { gasGet, gasPost } from '@/lib/api'
+import type { GASWorkOrderType } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -9,9 +10,31 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/components/ui/use-toast'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { WorkOrderType, ApiResponse } from '@/types'
+import type { WorkOrderType } from '@/types'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
+
+const KEY = 'work-order-types'
+
+function idNum(type_id: string): number {
+  return parseInt(type_id?.replace('WOT-', '') || '0', 10) || 0
+}
+
+function toTypeId(id: number): string {
+  return 'WOT-' + String(id).padStart(3, '0')
+}
+
+function mapType(t: GASWorkOrderType): WorkOrderType {
+  return {
+    id: idNum(t.type_id),
+    orgId: 0,
+    name: t.name,
+    color: t.color || '#3B82F6',
+    description: t.description || undefined,
+    createdAt: '',
+    updatedAt: '',
+  }
+}
 
 export function WorkOrderTypesPage() {
   const { toast } = useToast()
@@ -20,10 +43,37 @@ export function WorkOrderTypesPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editType, setEditType] = useState<WorkOrderType | null>(null)
 
-  const { data: types, isLoading } = useQuery({ queryKey: ['work-order-types'], queryFn: async () => { const { data } = await api.get<ApiResponse<WorkOrderType[]>>('/work-order-types'); return data.data } })
-  const create = useMutation({ mutationFn: async (body: Partial<WorkOrderType>) => { const { data } = await api.post('/work-order-types', body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['work-order-types'] }) })
-  const update = useMutation({ mutationFn: async ({ id, ...body }: Partial<WorkOrderType> & { id: number }) => { const { data } = await api.put(`/work-order-types/${id}`, body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['work-order-types'] }) })
-  const remove = useMutation({ mutationFn: async (id: number) => { await api.delete(`/work-order-types/${id}`) }, onSuccess: () => qc.invalidateQueries({ queryKey: ['work-order-types'] }) })
+  const { data: types, isLoading } = useQuery({
+    queryKey: [KEY],
+    queryFn: async () => {
+      const rows = await gasGet<GASWorkOrderType[]>('workOrderTypes')
+      return rows.map(mapType)
+    },
+  })
+
+  const create = useMutation({
+    mutationFn: async (body: Partial<WorkOrderType>) =>
+      gasPost<{ success: boolean }>('createWorkOrderType', {
+        name: body.name || '',
+        color: body.color || '#3B82F6',
+        description: body.description || '',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const update = useMutation({
+    mutationFn: async ({ id, ...body }: Partial<WorkOrderType> & { id: number }) =>
+      gasPost<{ success: boolean }>('updateWorkOrderType', {
+        type_id: toTypeId(id),
+        updates: { name: body.name, color: body.color, description: body.description },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: number) => gasPost<{ success: boolean }>('deleteWorkOrderType', { type_id: toTypeId(id) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
 
   const { register, handleSubmit, reset } = useForm<Partial<WorkOrderType>>()
 

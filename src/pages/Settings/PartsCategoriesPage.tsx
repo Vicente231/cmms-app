@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import api from '@/lib/axios'
+import { gasGet, gasPost } from '@/lib/api'
+import type { GASPartsCategory } from '@/lib/api'
 import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -10,9 +11,30 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/components/ui/use-toast'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { PartsCategory, ApiResponse } from '@/types'
+import type { PartsCategory } from '@/types'
 import { Pencil, Trash2 } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
+
+const KEY = 'parts-categories'
+
+function idNum(category_id: string): number {
+  return parseInt(category_id?.replace('PC-', '') || '0', 10) || 0
+}
+
+function toCatId(id: number): string {
+  return 'PC-' + String(id).padStart(4, '0')
+}
+
+function mapCat(c: GASPartsCategory): PartsCategory {
+  return {
+    id: idNum(c.category_id),
+    name: c.name,
+    description: c.description || undefined,
+    parent: c.parent ? { id: 0, name: c.parent } : undefined,
+    createdAt: '',
+    updatedAt: '',
+  }
+}
 
 export function PartsCategoriesPage() {
   const { toast } = useToast()
@@ -21,10 +43,41 @@ export function PartsCategoriesPage() {
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editCat, setEditCat] = useState<PartsCategory | null>(null)
 
-  const { data: cats, isLoading } = useQuery({ queryKey: ['parts-categories'], queryFn: async () => { const { data } = await api.get<ApiResponse<PartsCategory[]>>('/parts-categories'); return data.data } })
-  const create = useMutation({ mutationFn: async (body: Partial<PartsCategory>) => { const { data } = await api.post('/parts-categories', body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['parts-categories'] }) })
-  const update = useMutation({ mutationFn: async ({ id, ...body }: Partial<PartsCategory> & { id: number }) => { const { data } = await api.put(`/parts-categories/${id}`, body); return data.data }, onSuccess: () => qc.invalidateQueries({ queryKey: ['parts-categories'] }) })
-  const remove = useMutation({ mutationFn: async (id: number) => { await api.delete(`/parts-categories/${id}`) }, onSuccess: () => qc.invalidateQueries({ queryKey: ['parts-categories'] }) })
+  const { data: cats, isLoading } = useQuery({
+    queryKey: [KEY],
+    queryFn: async () => {
+      const rows = await gasGet<GASPartsCategory[]>('partsCategories')
+      return rows.map(mapCat)
+    },
+  })
+
+  const create = useMutation({
+    mutationFn: async (body: Partial<PartsCategory>) =>
+      gasPost<{ success: boolean }>('createPartsCategory', {
+        name: body.name || '',
+        description: body.description || '',
+        parent: (body.parent as { name?: string } | undefined)?.name || '',
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const update = useMutation({
+    mutationFn: async ({ id, ...body }: Partial<PartsCategory> & { id: number }) =>
+      gasPost<{ success: boolean }>('updatePartsCategory', {
+        category_id: toCatId(id),
+        updates: {
+          name: body.name,
+          description: body.description,
+          parent: (body.parent as { name?: string } | undefined)?.name,
+        },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: number) => gasPost<{ success: boolean }>('deletePartsCategory', { category_id: toCatId(id) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
 
   const { register, handleSubmit, control, reset } = useForm<Partial<PartsCategory>>()
 
