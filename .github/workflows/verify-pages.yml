@@ -1,0 +1,48 @@
+name: Verify Published Pages
+
+on:
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types:
+      - completed
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Wait for GitHub Pages to propagate
+        run: sleep 30
+
+      - name: Verify home page
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://vicente231.github.io/cmms-app/)
+          echo "Home page status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: Home page returned $STATUS, expected 200"
+            exit 1
+          fi
+
+      - name: Verify login page asset
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://vicente231.github.io/cmms-app/index.html)
+          echo "index.html status: $STATUS"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: index.html returned $STATUS, expected 200"
+            exit 1
+          fi
+
+      - name: Check page contains app root
+        run: |
+          BODY=$(curl -s https://vicente231.github.io/cmms-app/)
+          if echo "$BODY" | grep -q '<div id="root">'; then
+            echo "App root element found"
+          else
+            echo "ERROR: App root element not found in page"
+            exit 1
+          fi
+
+      - name: Summary
+        run: echo "All pages verified successfully."
