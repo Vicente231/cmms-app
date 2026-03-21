@@ -17,7 +17,7 @@ export async function gasGet<T>(action: string, params: Record<string, string> =
   const res = await fetch(url.toString())
   if (!res.ok) throw new Error(`GAS request failed: ${res.status} ${res.statusText}`)
   const data = await res.json()
-  if (data && typeof data === 'object' && 'error' in data) throw new Error(String(data.error))
+  if (data && data.error) throw new Error(data.error)
   return data as T
 }
 
@@ -34,7 +34,7 @@ export async function gasPost<T>(action: string, payload: Record<string, unknown
   })
   if (!res.ok) throw new Error(`GAS request failed: ${res.status} ${res.statusText}`)
   const data = await res.json()
-  if (data && typeof data === 'object' && 'error' in data) throw new Error(String(data.error))
+  if (data && data.error) throw new Error(data.error)
   return data as T
 }
 
