@@ -23,11 +23,12 @@ export function AssetsPage() {
   const { toast } = useToast()
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
+  const [searchField, setSearchField] = useState<'name' | 'id' | 'type' | 'parent' | 'location' | 'criticality' | 'status'>('name')
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editAsset, setEditAsset] = useState<Asset | null>(null)
 
-  const { data, isLoading } = useAssets({ page, limit: 20, search })
+  const { data, isLoading } = useAssets(search, page, 20, searchField)
   const { data: locations } = useLocations({ limit: 100 })
   const createAsset = useCreateAsset()
   const updateAsset = useUpdateAsset()
@@ -107,12 +108,26 @@ export function AssetsPage() {
         onAddNew={openCreate}
         addNewLabel="Add Asset"
         searchValue={search}
-        onSearchChange={setSearch}
-        searchPlaceholder="Search assets..."
+        onSearchChange={(v) => { setSearch(v); setPage(1) }}
+        searchPlaceholder={`Search by ${searchField}...`}
         page={page}
         totalPages={data?.pagination.totalPages}
         onPageChange={setPage}
         total={data?.pagination.total}
+        extraActions={
+          <Select value={searchField} onValueChange={(v) => { setSearchField(v as typeof searchField); setSearch(''); setPage(1) }}>
+            <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name</SelectItem>
+              <SelectItem value="id">ID</SelectItem>
+              <SelectItem value="type">Type</SelectItem>
+              <SelectItem value="parent">Parent</SelectItem>
+              <SelectItem value="location">Location</SelectItem>
+              <SelectItem value="criticality">Criticality</SelectItem>
+              <SelectItem value="status">Status</SelectItem>
+            </SelectContent>
+          </Select>
+        }
       />
 
       <CRUDModal

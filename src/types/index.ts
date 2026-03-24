@@ -110,6 +110,7 @@ export interface Asset {
   assetTag?: string
   serialNumber?: string
   model?: string
+  criticality?: string
   manufacturer?: string
   purchaseDate?: string
   purchaseCost?: number
@@ -284,6 +285,9 @@ export interface PmSchedule {
   type?: { id: number; name: string; color: string }
   name: string
   description?: string
+  targetType?: 'asset' | 'asset_type' | 'location' | 'group'
+  targetId?: string
+  taskIds?: string[]
   triggerType: PmTriggerType
   priority: WoPriority
   frequencyValue: number

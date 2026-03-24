@@ -24,7 +24,7 @@ const statusLabels: Record<string, string> = {
 
 export default function Dashboard() {
   const { data: stats } = useDashboardStats()
-  const { data: assets } = useAssets({ limit: 1 })
+  const { data: assets } = useAssets()
   const { data: overdueParts } = useParts({ limit: 1 })
   const navigate = useNavigate()
 

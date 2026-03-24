@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { ArrowLeft, CheckSquare, Clock, Package, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
-import api from '@/lib/axios'
+import { gasPost } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -19,7 +19,7 @@ export function WorkOrderDetailPage() {
 
   const toggleTask = async (taskId: number, isCompleted: boolean) => {
     try {
-      await api.patch(`/work-orders/${id}/tasks/${taskId}`, { isCompleted })
+      await gasPost('updateWorkOrderTask', { wo_id: id, task_id: taskId, is_completed: isCompleted })
       qc.invalidateQueries({ queryKey: ['work-orders', +id!] })
     } catch {
       toast({ title: 'Error', variant: 'destructive' })
