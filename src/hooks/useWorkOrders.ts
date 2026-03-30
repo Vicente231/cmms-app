@@ -35,32 +35,49 @@ function mapWo(wo: GASWorkOrder): WorkOrder {
   }
 }
 
-function toPaged(items: WorkOrder[]): PaginatedResponse<WorkOrder> {
+function toPaged(all: WorkOrder[], params?: Record<string, string | number>): PaginatedResponse<WorkOrder> {
+  const search = String(params?.search || '').toLowerCase().trim()
+  const status = String(params?.status || '').toLowerCase().trim()
+  const page   = Number(params?.page  || 1)
+  const limit  = Number(params?.limit || all.length || 20)
+
+  let filtered = all
+  if (search) filtered = filtered.filter((w) =>
+    w.woNumber?.toLowerCase().includes(search) ||
+    w.title?.toLowerCase().includes(search) ||
+    w.asset?.name?.toLowerCase().includes(search)
+  )
+  if (status) filtered = filtered.filter((w) => w.status === status)
+
+  const total      = filtered.length
+  const totalPages = Math.max(1, Math.ceil(total / limit))
+  const start      = (page - 1) * limit
+  const data       = filtered.slice(start, start + limit)
+
   return {
-    data: items,
-    pagination: { total: items.length, page: 1, limit: items.length, totalPages: 1, hasNext: false, hasPrev: false },
+    data,
+    pagination: { total, page, limit, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   }
 }
 
-export const useWorkOrders = (_params?: Record<string, string | number>) =>
+const useAllWorkOrders = () =>
   useQuery({
     queryKey: [KEY],
     queryFn: async () => {
       const rows = await gasGet<GASWorkOrder[]>('workOrders')
-      return toPaged(rows.map(mapWo))
+      return rows.map(mapWo)
     },
   })
 
-export const useWorkOrder = (id: number) =>
-  useQuery({
-    queryKey: [KEY, id],
-    queryFn: async () => {
-      const rows = await gasGet<GASWorkOrder[]>('workOrders')
-      const found = rows.find((w) => idNum(w.wo_id) === id)
-      return found ? mapWo(found) : null
-    },
-    enabled: !!id,
-  })
+export const useWorkOrders = (params?: Record<string, string | number>) => {
+  const query = useAllWorkOrders()
+  return { ...query, data: toPaged(query.data ?? [], params) }
+}
+
+export const useWorkOrder = (id: number) => {
+  const query = useAllWorkOrders()
+  return { ...query, data: query.data?.find((w) => w.id === id) ?? null }
+}
 
 export const useCreateWorkOrder = () => {
   const qc = useQueryClient()

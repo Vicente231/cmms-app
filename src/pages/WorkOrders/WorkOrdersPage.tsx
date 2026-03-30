@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useWorkOrders, useCreateWorkOrder, useUpdateWorkOrder, useDeleteWorkOrder } from '@/hooks/useWorkOrders'
 import { useAssets } from '@/hooks/useAssets'
 import { DataTable } from '@/components/shared/DataTable'
@@ -30,18 +30,20 @@ export function WorkOrdersPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [deleteId, setDeleteId] = useState<number | null>(null)
   const [editWO, setEditWO] = useState<WorkOrder | null>(null)
+  const [assetSearch, setAssetSearch] = useState('')
+  const [locationFilter, setLocationFilter] = useState('')
 
   const params = { page, limit: 20, search, ...(statusFilter && statusFilter !== 'all' ? { status: statusFilter } : {}) }
   const { data, isLoading } = useWorkOrders(params)
-  const { data: assets } = useAssets({ limit: 100 })
+  const { data: assets } = useAssets('', 1, 9999)
   const createWO = useCreateWorkOrder()
   const updateWO = useUpdateWorkOrder()
   const deleteWO = useDeleteWorkOrder()
 
   const { register, handleSubmit, control, reset } = useForm<Partial<WorkOrder>>()
 
-  const openCreate = () => { setEditWO(null); reset({ priority: 'medium', status: 'open' }); setModalOpen(true) }
-  const openEdit = (wo: WorkOrder) => { setEditWO(wo); reset(wo); setModalOpen(true) }
+  const openCreate = () => { setEditWO(null); reset({ priority: 'medium', status: 'open' }); setAssetSearch(''); setLocationFilter(''); setModalOpen(true) }
+  const openEdit = (wo: WorkOrder) => { setEditWO(wo); reset(wo); setAssetSearch(''); setLocationFilter(''); setModalOpen(true) }
 
   const onSubmit = handleSubmit(async (data) => {
     try {
@@ -102,7 +104,7 @@ export function WorkOrdersPage() {
         onAddNew={openCreate}
         addNewLabel="New Work Order"
         searchValue={search}
-        onSearchChange={setSearch}
+        onSearchChange={(v) => { setSearch(v); setPage(1) }}
         searchPlaceholder="Search work orders..."
         page={page}
         totalPages={data?.pagination.totalPages}
@@ -125,14 +127,60 @@ export function WorkOrdersPage() {
             <Label>Title *</Label>
             <Input {...register('title', { required: true })} placeholder="Describe the work needed" />
           </div>
-          <div className="space-y-2">
+          <div className="col-span-2 space-y-2">
             <Label>Asset</Label>
-            <Controller control={control} name="assetId" render={({ field }) => (
-              <Select onValueChange={(v) => field.onChange(+v)} value={field.value?.toString()}>
-                <SelectTrigger><SelectValue placeholder="Select asset" /></SelectTrigger>
-                <SelectContent>{assets?.data.map((a) => <SelectItem key={a.id} value={a.id.toString()}>{a.name}</SelectItem>)}</SelectContent>
-              </Select>
-            )} />
+            {/* Location filter */}
+            <Select value={locationFilter} onValueChange={setLocationFilter}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Filter by location (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All locations</SelectItem>
+                {[...new Set((assets?.data ?? []).map(a => a.location?.name).filter(Boolean))].map(loc => (
+                  <SelectItem key={loc} value={loc!}>{loc}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Name search + combobox */}
+            <Controller control={control} name="assetId" render={({ field }) => {
+              const allAssets = (assets?.data ?? []).filter(a =>
+                !locationFilter || locationFilter === 'all' || a.location?.name === locationFilter
+              )
+              const selectedAsset = (assets?.data ?? []).find(a => a.id === field.value)
+              const filtered = assetSearch
+                ? allAssets.filter(a => (a.name ?? '').toLowerCase().includes(assetSearch.toLowerCase()))
+                : allAssets
+              const [open, setOpen] = useState(false)
+              const ref = useRef<HTMLDivElement>(null)
+              return (
+                <div className="relative" ref={ref}>
+                  <Input
+                    placeholder={selectedAsset && !assetSearch ? selectedAsset.name : 'Search asset name...'}
+                    value={assetSearch}
+                    onChange={(e) => { setAssetSearch(e.target.value); setOpen(true) }}
+                    onFocus={() => setOpen(true)}
+                    onBlur={() => setTimeout(() => setOpen(false), 150)}
+                  />
+                  {open && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-56 overflow-y-auto">
+                      {filtered.length === 0
+                        ? <div className="p-2 text-sm text-muted-foreground">No assets found</div>
+                        : filtered.map(a => (
+                          <div
+                            key={a.id}
+                            className={cn('px-3 py-2 text-sm cursor-pointer hover:bg-accent', field.value === a.id && 'bg-accent font-medium')}
+                            onMouseDown={() => { field.onChange(a.id); setAssetSearch(''); setOpen(false) }}
+                          >
+                            <span>{a.name}</span>
+                            {a.location?.name && <span className="ml-2 text-xs text-muted-foreground">{a.location.name}</span>}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  )}
+                </div>
+              )
+            }} />
           </div>
           <div className="space-y-2">
             <Label>Priority</Label>

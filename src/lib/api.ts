@@ -106,6 +106,23 @@ export interface GASWorkRequest {
   converted_to_wo: string
 }
 
+export interface GASPMSchedule {
+  pm_id: string
+  name: string
+  description: string
+  target_type: string
+  target_id: string
+  priority: string
+  frequency_value: string | number
+  frequency_unit: string
+  next_due_date: string
+  last_generated_date: string
+  estimated_hours: string | number
+  is_active: string | boolean
+  created_date: string
+  task_ids: string
+}
+
 export interface GASAssetType {
   type_code: string
   label: string
