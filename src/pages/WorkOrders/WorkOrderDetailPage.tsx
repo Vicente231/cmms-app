@@ -1,28 +1,64 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useWorkOrder } from '@/hooks/useWorkOrders'
+import { useState } from 'react'
+import { useWorkOrder, useWorkOrderTasks, useUpdateWorkOrderTask } from '@/hooks/useWorkOrders'
+import { useMaintenanceTasks } from '@/hooks/usePMSchedules'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { ArrowLeft, CheckSquare, Clock, Package, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, CheckSquare, Square, Clock, Package } from 'lucide-react'
 import { format } from 'date-fns'
-import { gasPost } from '@/lib/api'
-import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/use-toast'
+
+function evalPassCondition(value: string, condition: string): boolean | null {
+  if (!condition || !value) return null
+  const num = parseFloat(value)
+  if (isNaN(num)) return null
+  const m = condition.match(/^([><=!]+)\s*([\d.]+)$/)
+  if (!m) return null
+  const thresh = parseFloat(m[2])
+  switch (m[1]) {
+    case '>':  return num > thresh
+    case '>=': return num >= thresh
+    case '<':  return num < thresh
+    case '<=': return num <= thresh
+    case '=':
+    case '==': return num === thresh
+    case '!=': return num !== thresh
+    default:   return null
+  }
+}
 
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const qc = useQueryClient()
   const { data: wo, isLoading } = useWorkOrder(+id!)
+  const { data: woTasks = [] } = useWorkOrderTasks(+id!)
+  const { data: allMTasks = [] } = useMaintenanceTasks()
+  const updateTask = useUpdateWorkOrderTask(+id!)
+  const [measureValues, setMeasureValues] = useState<Record<string, string>>({})
 
-  const toggleTask = async (taskId: number, isCompleted: boolean) => {
+  // Build map of template_task_id → { measurementUnit, passCondition }
+  const mtMap = Object.fromEntries(
+    allMTasks.map(t => [t.task_id, { measurementUnit: t.measurement_unit, passCondition: t.pass_condition }])
+  )
+
+  const toggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
-      await gasPost('updateWorkOrderTask', { wo_id: id, task_id: taskId, is_completed: isCompleted })
-      qc.invalidateQueries({ queryKey: ['work-orders', +id!] })
+      await updateTask.mutateAsync({ taskId, updates: { is_completed: isCompleted } })
     } catch {
       toast({ title: 'Error', variant: 'destructive' })
+    }
+  }
+
+  const saveMeasurement = async (taskId: string, value: string) => {
+    try {
+      await updateTask.mutateAsync({ taskId, updates: { measurement_value: value } })
+    } catch {
+      toast({ title: 'Error saving measurement', variant: 'destructive' })
     }
   }
 
@@ -46,7 +82,7 @@ export function WorkOrderDetailPage() {
       <Tabs defaultValue="details">
         <TabsList>
           <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="tasks">Tasks ({wo.tasks?.length || 0})</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks ({woTasks.length})</TabsTrigger>
           <TabsTrigger value="labor">Labor ({wo.labor?.length || 0})</TabsTrigger>
           <TabsTrigger value="parts">Parts ({wo.partsUsed?.length || 0})</TabsTrigger>
         </TabsList>
@@ -107,21 +143,48 @@ export function WorkOrderDetailPage() {
         <TabsContent value="tasks">
           <Card>
             <CardContent className="pt-6">
-              {wo.tasks?.length ? (
+              {woTasks.length ? (
                 <div className="space-y-2">
-                  {wo.tasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-3 rounded-lg border p-3">
-                      <button onClick={() => toggleTask(task.id, !task.isCompleted)} className="mt-0.5">
-                        <CheckSquare className={`h-5 w-5 ${task.isCompleted ? 'text-green-600' : 'text-muted-foreground'}`} />
-                      </button>
-                      <span className={`text-sm ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>{task.description}</span>
-                      {task.isCompleted && task.completedAt && (
-                        <span className="ml-auto text-xs text-muted-foreground">{format(new Date(task.completedAt), 'MMM d')}</span>
-                      )}
-                    </div>
-                  ))}
+                  {woTasks.map((task) => {
+                    const mt = mtMap[task.templateTaskId] ?? {}
+                    const currentVal = measureValues[task.taskId] ?? task.measurementValue
+                    const pass = mt.measurementUnit ? evalPassCondition(currentVal, mt.passCondition ?? '') : null
+                    return (
+                      <div key={task.taskId} className="rounded-lg border p-3 space-y-2">
+                        <div className="flex items-start gap-3">
+                          <button onClick={() => toggleTask(task.taskId, !task.isCompleted)} className="mt-0.5 shrink-0">
+                            {task.isCompleted
+                              ? <CheckSquare className="h-5 w-5 text-green-600" />
+                              : <Square className="h-5 w-5 text-muted-foreground" />}
+                          </button>
+                          <span className={`text-sm flex-1 ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>
+                            {task.description}
+                          </span>
+                          {mt.passCondition && (
+                            <span className="text-xs text-muted-foreground shrink-0">Required: {mt.passCondition} {mt.measurementUnit}</span>
+                          )}
+                        </div>
+                        {mt.measurementUnit && (
+                          <div className="flex items-center gap-2 pl-8">
+                            <Input
+                              type="number"
+                              step="any"
+                              className="w-32 h-8 text-sm"
+                              placeholder="Enter value"
+                              value={currentVal}
+                              onChange={(e) => setMeasureValues(prev => ({ ...prev, [task.taskId]: e.target.value }))}
+                              onBlur={() => currentVal !== task.measurementValue && saveMeasurement(task.taskId, currentVal)}
+                            />
+                            <span className="text-sm font-medium text-muted-foreground">{mt.measurementUnit}</span>
+                            {pass === true  && <Badge className="bg-green-600 text-white">PASS</Badge>}
+                            {pass === false && <Badge variant="destructive">FAIL</Badge>}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
-              ) : <p className="text-muted-foreground text-center py-8">No tasks</p>}
+              ) : <p className="text-muted-foreground text-center py-8">No tasks — generate a WO from a PM Schedule to populate tasks</p>}
             </CardContent>
           </Card>
         </TabsContent>

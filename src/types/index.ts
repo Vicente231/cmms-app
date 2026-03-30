@@ -444,6 +444,19 @@ export interface Attachment {
   createdAt: string
 }
 
+export interface WorkOrderTask {
+  taskId: string
+  woId: string
+  templateTaskId: string
+  description: string
+  isCompleted: boolean
+  completionNotes: string
+  timeSpentMinutes: number | null
+  measurementValue: string
+  measurementUnit?: string
+  passCondition?: string
+}
+
 export interface PaginatedResponse<T> {
   data: T[]
   pagination: {

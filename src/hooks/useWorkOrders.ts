@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { gasGet, gasPost } from '@/lib/api'
-import type { GASWorkOrder } from '@/lib/api'
-import type { WorkOrder, WoStatus, WoPriority, PaginatedResponse } from '@/types'
+import type { GASWorkOrder, GASWorkOrderTask } from '@/lib/api'
+import type { WorkOrder, WorkOrderTask, WoStatus, WoPriority, PaginatedResponse } from '@/types'
 
 const KEY = 'work-orders'
 
@@ -123,6 +123,40 @@ export const useDeleteWorkOrder = () => {
     mutationFn: (id: number) =>
       gasPost<{ success: boolean }>('deleteWorkOrder', { wo_id: toWoId(id) }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
+  })
+}
+
+function mapWoTask(t: GASWorkOrderTask): WorkOrderTask {
+  return {
+    taskId: t.task_id,
+    woId: t.wo_id,
+    templateTaskId: t.template_task_id,
+    description: t.task_description,
+    isCompleted: t.is_completed === true || String(t.is_completed).toUpperCase() === 'TRUE',
+    completionNotes: t.completion_notes || '',
+    timeSpentMinutes: t.time_spent_minutes ? Number(t.time_spent_minutes) : null,
+    measurementValue: t.measurement_value ? String(t.measurement_value) : '',
+  }
+}
+
+export const useWorkOrderTasks = (woId: number) => {
+  const woIdStr = toWoId(woId)
+  return useQuery({
+    queryKey: ['wo-tasks', woId],
+    queryFn: async () => {
+      const rows = await gasGet<GASWorkOrderTask[]>('workOrderTasks')
+      return rows.filter(t => t.wo_id === woIdStr).map(mapWoTask)
+    },
+    enabled: !!woId,
+  })
+}
+
+export const useUpdateWorkOrderTask = (woId: number) => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ taskId, updates }: { taskId: string; updates: Record<string, unknown> }) =>
+      gasPost<{ success: boolean }>('updateWorkOrderTask', { task_id: taskId, updates }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wo-tasks', woId] }),
   })
 }
 

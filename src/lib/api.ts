@@ -92,6 +92,19 @@ export interface GASMaintenanceTask {
   frequency: string
   safety: string
   estimated_duration: string
+  measurement_unit?: string
+  pass_condition?: string
+}
+
+export interface GASWorkOrderTask {
+  task_id: string
+  wo_id: string
+  template_task_id: string
+  task_description: string
+  is_completed: boolean | string
+  completion_notes: string
+  time_spent_minutes: string | number
+  measurement_value: string | number
 }
 
 export interface GASWorkRequest {

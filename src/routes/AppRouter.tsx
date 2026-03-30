@@ -8,6 +8,7 @@ import { AssetDetailPage } from '@/pages/Assets/AssetDetailPage'
 import { WorkOrdersPage } from '@/pages/WorkOrders/WorkOrdersPage'
 import { WorkOrderDetailPage } from '@/pages/WorkOrders/WorkOrderDetailPage'
 import { PMSchedulesPage } from '@/pages/PM/PMSchedulesPage'
+import { MaintenanceTasksPage } from '@/pages/PM/MaintenanceTasksPage'
 import { PartsPage } from '@/pages/Inventory/PartsPage'
 import { InventoryTransactionsPage } from '@/pages/Inventory/InventoryTransactionsPage'
 import { VendorsPage } from '@/pages/Purchasing/VendorsPage'
@@ -35,6 +36,7 @@ export default function AppRouter() {
             <Route path="/work-orders" element={<WorkOrdersPage />} />
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
             <Route path="/pm-schedules" element={<PMSchedulesPage />} />
+            <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
             <Route path="/inventory/parts" element={<PartsPage />} />
             <Route path="/inventory/transactions" element={<InventoryTransactionsPage />} />
             <Route path="/purchasing/vendors" element={<VendorsPage />} />

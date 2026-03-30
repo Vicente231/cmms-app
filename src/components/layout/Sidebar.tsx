@@ -19,7 +19,12 @@ const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', icon: LayoutDashboard },
   { label: 'Assets', href: '/assets', icon: Package },
   { label: 'Work Orders', href: '/work-orders', icon: Wrench },
-  { label: 'PM Schedules', href: '/pm-schedules', icon: Calendar },
+  {
+    label: 'Preventive Maintenance', icon: Calendar, children: [
+      { label: 'PM Schedules', href: '/pm-schedules', icon: Calendar },
+      { label: 'Maintenance Tasks', href: '/maintenance-tasks', icon: ClipboardList },
+    ],
+  },
   {
     label: 'Inventory', icon: Box, children: [
       { label: 'Parts', href: '/inventory/parts', icon: Box },
