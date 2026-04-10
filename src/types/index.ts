@@ -118,6 +118,7 @@ export interface Asset {
   status: AssetStatus
   description?: string
   qrCode?: string
+  attrs?: Record<string, unknown>
   customFields?: AssetCustomField[]
   meters?: AssetMeter[]
   createdAt: string

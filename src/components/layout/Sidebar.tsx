@@ -23,6 +23,7 @@ const navItems: NavItem[] = [
     label: 'Preventive Maintenance', icon: Calendar, children: [
       { label: 'PM Schedules', href: '/pm-schedules', icon: Calendar },
       { label: 'Maintenance Tasks', href: '/maintenance-tasks', icon: ClipboardList },
+      { label: 'Checklists', href: '/checklists', icon: BarChart3 },
     ],
   },
   {

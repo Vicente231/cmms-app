@@ -28,6 +28,7 @@ function mapAsset(a: GASAsset): Asset {
     description: a.notes,
     location: a.location ? { id: 0, name: a.location } : undefined,
     parentAsset: a.parent_asset ? { id: 0, name: a.parent_asset, assetTag: a.parent_asset } : undefined,
+    attrs: typeof a.attrs === 'object' && a.attrs !== null ? a.attrs as Record<string, unknown> : {},
     createdAt: a.install_date || '',
     updatedAt: '',
   }
