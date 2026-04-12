@@ -310,7 +310,7 @@ export function ChecklistsPage() {
   const [editItem, setEditItem]     = useState<ChecklistConfig | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
 
-  const { data: assetsData } = useAssets({ limit: 9999 })
+  const { data: assetsData } = useAssets()
   const { data: tasks = [] } = useMaintenanceTasks()
 
   const allAssets  = assetsData?.data ?? []
