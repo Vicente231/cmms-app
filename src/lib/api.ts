@@ -92,6 +92,8 @@ export interface GASMaintenanceTask {
   frequency: string
   safety: string
   estimated_duration: string
+  measurement_unit?: string
+  pass_condition?: string
 }
 
 export interface GASWorkRequest {

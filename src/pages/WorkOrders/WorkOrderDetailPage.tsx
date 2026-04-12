@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { ArrowLeft, CheckSquare, Clock, Package, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, CheckSquare, Clock, Package } from 'lucide-react'
 import { format } from 'date-fns'
 import { gasPost } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
@@ -108,15 +108,15 @@ export function WorkOrderDetailPage() {
           <Card>
             <CardContent className="pt-6">
               {wo.tasks?.length ? (
-                <div className="space-y-2">
+                <div className="flex flex-wrap gap-2">
                   {wo.tasks.map((task) => (
-                    <div key={task.id} className="flex items-start gap-3 rounded-lg border p-3">
-                      <button onClick={() => toggleTask(task.id, !task.isCompleted)} className="mt-0.5">
+                    <div key={task.id} className="flex items-start gap-2 rounded-lg border p-3 min-w-[200px] flex-1">
+                      <button onClick={() => toggleTask(task.id, !task.isCompleted)} className="mt-0.5 shrink-0">
                         <CheckSquare className={`h-5 w-5 ${task.isCompleted ? 'text-green-600' : 'text-muted-foreground'}`} />
                       </button>
                       <span className={`text-sm ${task.isCompleted ? 'line-through text-muted-foreground' : ''}`}>{task.description}</span>
                       {task.isCompleted && task.completedAt && (
-                        <span className="ml-auto text-xs text-muted-foreground">{format(new Date(task.completedAt), 'MMM d')}</span>
+                        <span className="ml-auto text-xs text-muted-foreground shrink-0">{format(new Date(task.completedAt), 'MMM d')}</span>
                       )}
                     </div>
                   ))}
