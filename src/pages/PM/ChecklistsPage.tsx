@@ -84,8 +84,8 @@ async function generateChecklist(
   const logo = await loadLogo()
 
   const allMatching = assets.filter(a => {
-    const loc = typeof a.location === 'string' ? a.location : (a.location?.name ?? '')
-    return loc.trim().toLowerCase() === config.location.trim().toLowerCase() && (a.model ?? '') === config.assetType
+    const loc = (a.location?.name ?? a.location ?? '').toString().trim().toLowerCase()
+    return loc === config.location.trim().toLowerCase() && (a.model ?? '') === config.assetType
   })
   const activeAssets   = allMatching.filter(a => String(a.status).toUpperCase() !== 'INACTIVE')
   const inactiveAssets = allMatching.filter(a => String(a.status).toUpperCase() === 'INACTIVE')
@@ -310,11 +310,11 @@ export function ChecklistsPage() {
   const [editItem, setEditItem]     = useState<ChecklistConfig | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
 
-  const { data: assetsData } = useAssets()
+  const { data: assetsData } = useAssets('', 1, 9999)
   const { data: tasks = [] } = useMaintenanceTasks()
 
   const allAssets  = assetsData?.data ?? []
-  const locations  = [...new Set(allAssets.map(a => typeof a.location === 'string' ? a.location : a.location?.name ?? '').filter((x): x is string => Boolean(x)))].sort()
+  const locations  = [...new Set(allAssets.map(a => a.location?.name ?? '').filter((x): x is string => Boolean(x)))].sort()
   const assetTypes = [...new Set(allAssets.map(a => a.model).filter((x): x is string => Boolean(x)))].sort()
 
   const { register, handleSubmit, control, reset, watch } = useForm<Omit<ChecklistConfig, 'id' | 'createdAt'>>()
@@ -375,8 +375,8 @@ export function ChecklistsPage() {
 
   const assetCount = (cfg: ChecklistConfig) =>
     allAssets.filter(a => {
-      const loc = typeof a.location === 'string' ? a.location : (a.location?.name ?? '')
-      return loc.trim().toLowerCase() === cfg.location.trim().toLowerCase() && a.model === cfg.assetType
+      const loc = (a.location?.name ?? '').trim().toLowerCase()
+      return loc === cfg.location.trim().toLowerCase() && a.model === cfg.assetType
     }).length
 
   const taskCountFor = (cfg: ChecklistConfig) =>
