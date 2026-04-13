@@ -6,8 +6,13 @@ export type OperationMode = 'RUNNING' | 'LOCKOUT' | 'ALL'
 export interface ChecklistConfig {
   id: string
   name: string
+  pmId: string
+  pmName: string
   location: string
-  assetType: string
+  assetType: string        // asset type code (e.g. 'MOT'), empty if not applicable
+  pmTargetType: string     // 'asset_type' | 'group' | 'location' | 'asset'
+  pmTargetId: string       // the raw target_id from the PM schedule
+  taskIds: string[]        // specific task IDs from PM schedule
   operationMode: OperationMode
   description?: string
   createdAt: string
@@ -29,7 +34,8 @@ function hp(asset: Asset): number | null {
 }
 
 function logoDataUrl(): Promise<string> {
-  return fetch('/cmms-app/wrfp-logo.png')
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+  return fetch(`${base}/wrfp-logo.png`)
     .then(r => r.blob())
     .then(blob => new Promise<string>((res, rej) => {
       const reader = new FileReader()
@@ -47,17 +53,18 @@ export async function openPrintChecklist(
 ) {
   const logoSrc = await logoDataUrl()
 
-  const filtered = assets.filter(a => {
-    const loc = (a.location as { name?: string })?.name ?? ''
-    return loc.trim().toLowerCase() === config.location.trim().toLowerCase()
-      && (a.model ?? '') === config.assetType
-  })
+  // Assets are pre-filtered by the caller — use them directly
+  const filtered = assets
 
   const active   = filtered.filter(a => String(a.status).toUpperCase() !== 'INACTIVE')
   const inactive = filtered.filter(a => String(a.status).toUpperCase() === 'INACTIVE')
 
-  const byType = tasks.filter(t => t.asset_type === config.assetType)
-  const taskCols = byType.filter(t => {
+  // Use specific task IDs from the PM schedule if available, else fall back to asset type
+  const bySchedule = config.taskIds?.length
+    ? tasks.filter(t => config.taskIds.includes(t.task_id))
+    : tasks.filter(t => t.asset_type === config.assetType)
+
+  const taskCols = bySchedule.filter(t => {
     if (config.operationMode === 'ALL') return true
     const s = (t.safety ?? '').toUpperCase()
     if (config.operationMode === 'RUNNING') return s.includes('RUNNING')
@@ -215,7 +222,7 @@ export async function openPrintChecklist(
   <div class="header-title" style="text-align:right;">
     <h1>Preventive Maintenance Checklist</h1>
     <h2>${config.name}</h2>
-    <p>${config.location} &nbsp;|&nbsp; Type: ${config.assetType} &nbsp;|&nbsp; Mode: ${config.operationMode === 'RUNNING' ? 'Machine Running' : config.operationMode === 'LOCKOUT' ? 'Lockout / Tagout' : 'All Tasks'} &nbsp;|&nbsp; ${config.description || 'Growing Our Future — A Community Based Venture'}</p>
+    <p>${config.location} &nbsp;|&nbsp; ${config.pmName} &nbsp;|&nbsp; Mode: ${config.operationMode === 'RUNNING' ? 'Machine Running' : config.operationMode === 'LOCKOUT' ? 'Lockout / Tagout' : 'All Tasks'} &nbsp;|&nbsp; ${config.description || 'Growing Our Future — A Community Based Venture'}</p>
   </div>
 </div>
 

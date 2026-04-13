@@ -6,7 +6,11 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git tag:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx shadcn@latest add checkbox)",
+      "Bash(npm install:*)",
+      "Bash(git checkout:*)",
+      "Bash(node -e ':*)"
     ]
   }
 }
