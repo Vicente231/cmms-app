@@ -101,7 +101,10 @@ export function MaintenanceTasksPage() {
     )},
     { accessorKey: 'measurement_unit', header: 'Measurement', cell: ({ row }) => (
       row.original.measurement_unit
-        ? <span className="flex items-center gap-1 text-sm"><Ruler className="h-3 w-3" />{row.original.measurement_unit}{row.original.pass_condition && <span className="text-xs text-muted-foreground ml-1">({row.original.pass_condition})</span>}</span>
+        ? <div className="text-sm">
+            <span className="flex items-center gap-1"><Ruler className="h-3 w-3" />{row.original.measurement_unit}{row.original.pass_condition && <span className="text-xs text-muted-foreground ml-1">({row.original.pass_condition})</span>}</span>
+            {row.original.measurement_fields && <span className="text-xs text-muted-foreground">{row.original.measurement_fields}</span>}
+          </div>
         : <span className="text-xs text-muted-foreground">—</span>
     )},
     { id: 'actions', header: 'Actions', cell: ({ row }) => (
@@ -179,7 +182,12 @@ export function MaintenanceTasksPage() {
                 <Input {...register('pass_condition')} placeholder="e.g. >1.0, <80, =600" />
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Leave blank if this task only requires a checkbox (no measurement needed)</p>
+            <div className="space-y-2 mt-3">
+              <Label>Measurement Fields (optional)</Label>
+              <Input {...register('measurement_fields')} placeholder="e.g. L1-GND,L2-GND,L3-GND  or  Drive Side,Operator Side" />
+              <p className="text-xs text-muted-foreground">Comma-separated labels for multi-point measurements. Leave blank for a single value.</p>
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">Leave Unit blank if this task only requires a checkbox (no measurement needed)</p>
           </div>
 
         </div>

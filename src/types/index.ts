@@ -1,6 +1,35 @@
 export type AssetStatus = 'active' | 'inactive' | 'decommissioned' | 'under_maintenance'
 export type WoStatus = 'open' | 'in_progress' | 'on_hold' | 'completed' | 'cancelled'
 export type WoPriority = 'low' | 'medium' | 'high' | 'critical'
+export type WrStatus = 'reported' | 'planning' | 'procuring' | 'ready' | 'converted'
+export type WrItemStatus = 'pending' | 'ordered' | 'received' | 'requested' | 'confirmed'
+export type WrItemType = 'part' | 'service'
+
+export interface WorkRequest {
+  id: string
+  assetId: string
+  assetName: string
+  description: string
+  priority: WoPriority
+  requestedBy: string
+  requestDate: string
+  status: WrStatus
+  convertedToWo: string
+  imageUrls: string[]
+  notes: string
+}
+
+export interface WorkRequestItem {
+  itemId: string
+  wrId: string
+  itemType: WrItemType
+  description: string
+  quantity: string
+  unit: string
+  supplier: string
+  status: WrItemStatus
+  notes: string
+}
 export type PmTriggerType = 'time_based' | 'meter_based' | 'both'
 export type PoStatus = 'draft' | 'submitted' | 'approved' | 'ordered' | 'partially_received' | 'received' | 'cancelled'
 export type TransactionType = 'received' | 'issued' | 'adjustment' | 'return' | 'transfer'
@@ -112,6 +141,8 @@ export interface Asset {
   model?: string
   criticality?: string
   manufacturer?: string
+  vendor?: string
+  partNumber?: string
   purchaseDate?: string
   purchaseCost?: number
   warrantyExpiry?: string
@@ -208,6 +239,7 @@ export interface WorkOrder {
   actualHours?: number
   totalCost: number
   requiresDowntime: boolean
+  checklistTaskIds?: string[]
   tasks?: WoTask[]
   labor?: WoLabor[]
   partsUsed?: WoPartsUsed[]

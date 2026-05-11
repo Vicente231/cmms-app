@@ -94,6 +94,7 @@ export interface GASMaintenanceTask {
   estimated_duration: string
   measurement_unit?: string
   pass_condition?: string
+  measurement_fields?: string  // comma-separated field labels e.g. "L1-GND,L2-GND,L3-GND"
 }
 
 export interface GASWorkOrderTask {
@@ -117,6 +118,20 @@ export interface GASWorkRequest {
   request_date: string
   status: string
   converted_to_wo: string
+  image_urls: string
+  notes: string
+}
+
+export interface GASWorkRequestItem {
+  item_id: string
+  wr_id: string
+  item_type: string
+  description: string
+  quantity: string
+  unit: string
+  supplier: string
+  status: string
+  notes: string
 }
 
 export interface GASPMSchedule {

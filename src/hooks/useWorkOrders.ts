@@ -14,6 +14,13 @@ function toWoId(id: number): string {
 }
 
 function mapWo(wo: GASWorkOrder): WorkOrder {
+  const checklistTaskIds: string[] = (() => {
+    try {
+      const c = wo.checklist
+      if (Array.isArray(c)) return c as string[]
+      return JSON.parse(String(c || '[]'))
+    } catch { return [] }
+  })()
   return {
     id: idNum(wo.wo_id),
     orgId: 0,
@@ -28,6 +35,7 @@ function mapWo(wo: GASWorkOrder): WorkOrder {
     actualHours: wo.actual_duration ? parseFloat(wo.actual_duration) : undefined,
     totalCost: 0,
     requiresDowntime: false,
+    checklistTaskIds,
     assetId: wo.asset_id ? parseInt(wo.asset_id.replace('AST-', '') || '0', 10) : undefined,
     asset: wo.asset_id ? { id: 0, name: wo.asset_id, assetTag: wo.asset_id } : undefined,
     createdAt: '',
@@ -82,7 +90,7 @@ export const useWorkOrder = (id: number) => {
 export const useCreateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<WorkOrder>) =>
+    mutationFn: async (body: Partial<WorkOrder> & { taskIds?: string[] }) =>
       gasPost<{ success: boolean; wo_id: string }>('createWorkOrder', {
         wo_type: 'CM',
         asset_id: body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '',
@@ -92,6 +100,8 @@ export const useCreateWorkOrder = () => {
         description: body.title || body.description || '',
         problem_description: body.description || '',
         estimated_duration: body.estimatedHours ? String(body.estimatedHours) : '',
+        task_ids: body.taskIds || [],
+        checklist: JSON.stringify(body.taskIds || []),
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
@@ -151,12 +161,43 @@ export const useWorkOrderTasks = (woId: number) => {
   })
 }
 
+export const useInitializeWOTasks = (woId: number) => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (taskIds: string[]) =>
+      gasPost<{ success: boolean; created: number }>('initializeWOTasks', {
+        wo_id: toWoId(woId),
+        task_ids: taskIds,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wo-tasks', woId] }),
+  })
+}
+
 export const useUpdateWorkOrderTask = (woId: number) => {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ taskId, updates }: { taskId: string; updates: Record<string, unknown> }) =>
       gasPost<{ success: boolean }>('updateWorkOrderTask', { task_id: taskId, updates }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['wo-tasks', woId] }),
+    onMutate: async ({ taskId, updates }) => {
+      await qc.cancelQueries({ queryKey: ['wo-tasks', woId] })
+      const previous = qc.getQueryData<WorkOrderTask[]>(['wo-tasks', woId])
+      qc.setQueryData<WorkOrderTask[]>(['wo-tasks', woId], old =>
+        (old ?? []).map(t => {
+          if (t.taskId !== taskId) return t
+          const patch: Partial<WorkOrderTask> = {}
+          if ('is_completed'       in updates) patch.isCompleted      = updates.is_completed as boolean
+          if ('completion_notes'   in updates) patch.completionNotes  = updates.completion_notes as string
+          if ('time_spent_minutes' in updates) patch.timeSpentMinutes = updates.time_spent_minutes as number | null
+          if ('measurement_value'  in updates) patch.measurementValue = updates.measurement_value as string
+          return { ...t, ...patch }
+        })
+      )
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(['wo-tasks', woId], context.previous)
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['wo-tasks', woId] }),
   })
 }
 

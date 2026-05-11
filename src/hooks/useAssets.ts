@@ -21,9 +21,12 @@ function mapAsset(a: GASAsset): Asset {
     assetTag: a.asset_id,
     serialNumber: a.serial_number,
     manufacturer: a.manufacturer,
+    vendor: a.vendor,
+    partNumber: a.part_number,
     model: a.asset_type,
     criticality: a.criticality,
     status: (a.status?.toLowerCase().replace(/ /g, '_') as AssetStatus) || 'active',
+    purchaseDate: a.install_date || undefined,
     warrantyExpiry: a.warranty_expiry || undefined,
     description: a.notes,
     location: a.location ? { id: 0, name: a.location } : undefined,
@@ -113,19 +116,42 @@ export const useAsset = (id: number) => {
   return { data: (query.data ?? []).find((a) => a.id === id) ?? null, isLoading: query.isLoading }
 }
 
+export type AssetFormData = {
+  asset_name: string
+  asset_type: string
+  parent_asset: string
+  location: string
+  criticality: string
+  status: string
+  manufacturer: string
+  vendor: string
+  part_number: string
+  serial_number: string
+  install_date: string
+  warranty_expiry: string
+  notes: string
+  attrs?: Record<string, unknown>
+}
+
 export const useCreateAsset = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<Asset>) =>
+    mutationFn: async (body: Partial<AssetFormData>) =>
       gasPost<{ success: boolean; asset_id: string }>('createAsset', {
-        asset_name: body.name || '',
-        asset_type: body.model || '',
-        location: (body.location as { name?: string } | undefined)?.name || '',
-        status: body.status?.toUpperCase() || 'ACTIVE',
-        serial_number: body.serialNumber || '',
-        manufacturer: body.manufacturer || '',
-        notes: body.description || '',
-        warranty_expiry: body.warrantyExpiry || '',
+        asset_name:      body.asset_name      || '',
+        asset_type:      body.asset_type      || '',
+        parent_asset:    body.parent_asset    || '',
+        location:        body.location        || '',
+        criticality:     body.criticality     || 'MEDIUM',
+        status:          body.status          || 'ACTIVE',
+        manufacturer:    body.manufacturer    || '',
+        vendor:          body.vendor          || '',
+        part_number:     body.part_number     || '',
+        serial_number:   body.serial_number   || '',
+        install_date:    body.install_date    || '',
+        warranty_expiry: body.warranty_expiry || '',
+        notes:           body.notes           || '',
+        attrs:           body.attrs           || {},
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
@@ -134,17 +160,24 @@ export const useCreateAsset = () => {
 export const useUpdateAsset = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<Asset> & { id: number }) =>
+    mutationFn: async ({ id, ...body }: Partial<AssetFormData> & { id: number }) =>
       gasPost<{ success: boolean }>('updateAsset', {
         asset_id: toAssetId(id),
         updates: {
-          asset_name: body.name,
-          asset_type: body.model,
-          status: body.status?.toUpperCase(),
-          serial_number: body.serialNumber,
-          manufacturer: body.manufacturer,
-          notes: body.description,
-          warranty_expiry: body.warrantyExpiry,
+          asset_name:      body.asset_name,
+          asset_type:      body.asset_type,
+          parent_asset:    body.parent_asset,
+          location:        body.location,
+          criticality:     body.criticality,
+          status:          body.status,
+          manufacturer:    body.manufacturer,
+          vendor:          body.vendor,
+          part_number:     body.part_number,
+          serial_number:   body.serial_number,
+          install_date:    body.install_date,
+          warranty_expiry: body.warranty_expiry,
+          notes:           body.notes,
+          attrs:           body.attrs,
         },
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),

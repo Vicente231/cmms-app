@@ -93,7 +93,8 @@ export async function openPrintChecklist(
   const legendItems = taskCols.map((t, i) => {
     const s = safetyStyle(t.safety)
     const badge = `<span style="background:${s.bg};color:${s.color};font-size:6px;padding:1px 3px;border-radius:2px;font-weight:bold;margin-left:2px;">${s.label}</span>`
-    const meas  = t.measurement_unit ? ` <span style="color:#1a6b1a;font-size:7px;">(${t.measurement_unit}${t.pass_condition ? ` ${t.pass_condition}` : ''})</span>` : ''
+    const unitDisplay = (t.measurement_unit ?? '').replace('/', ' / ')
+    const meas  = t.measurement_unit ? ` <span style="color:#1a6b1a;font-size:7px;">(${unitDisplay}${t.pass_condition ? ` ${t.pass_condition}` : ''})</span>` : ''
     return `<span style="margin-right:12px;white-space:nowrap;"><strong>${i + 1}.</strong> ${t.description}${badge}${meas}</span>`
   })
 
@@ -119,9 +120,27 @@ export async function openPrintChecklist(
           const s = safetyStyle(t.safety)
           const cellBg = (t.safety ?? '').toUpperCase().includes('RUNNING') ? '#f0faf0' : '#fff8f4'
           if (t.measurement_unit) {
+            // "GOhm/MOhm" → display as "GOhm / MOhm" for the unit label
+            const unitLabel = t.measurement_unit.replace('/', ' / ')
+            const mFields = t.measurement_fields
+              ? t.measurement_fields.split(',').map(f => f.trim()).filter(Boolean)
+              : null
+            if (mFields && mFields.length > 1) {
+              // Multiple labeled writing lines
+              const lines = mFields.map(fl =>
+                `<div style="display:flex;align-items:flex-end;gap:2px;margin-bottom:2px;">
+                  <span style="font-size:5px;color:#555;white-space:nowrap;min-width:18px;line-height:1;">${fl}</span>
+                  <div style="flex:1;border-bottom:1px solid #999;min-height:12px;"></div>
+                </div>`
+              ).join('')
+              return `<td style="border:1px solid #ddd;padding:3px 2px;background:${cellBg};vertical-align:bottom;">
+                ${lines}
+                <div style="font-size:5px;color:${s.bg};font-weight:bold;white-space:nowrap;text-align:center;">${unitLabel}</div>
+              </td>`
+            }
             return `<td style="text-align:center;border:1px solid #ddd;padding:3px 2px;background:${cellBg};vertical-align:bottom;">
               <div style="border-bottom:1px solid #999;min-height:18px;margin-bottom:1px;"></div>
-              <div style="font-size:6px;color:${s.bg};font-weight:bold;white-space:nowrap;">${t.measurement_unit}</div>
+              <div style="font-size:6px;color:${s.bg};font-weight:bold;white-space:nowrap;">${unitLabel}</div>
             </td>`
           }
           return `<td style="text-align:center;border:1px solid #ddd;padding:2px;background:${cellBg};">

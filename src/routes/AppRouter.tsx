@@ -10,6 +10,8 @@ import { WorkOrderDetailPage } from '@/pages/WorkOrders/WorkOrderDetailPage'
 import { PMSchedulesPage } from '@/pages/PM/PMSchedulesPage'
 import { MaintenanceTasksPage } from '@/pages/PM/MaintenanceTasksPage'
 import { ChecklistsPage } from '@/pages/Checklists/ChecklistsPage'
+import { WorkRequestsPage } from '@/pages/WorkRequests/WorkRequestsPage'
+import { WorkRequestDetailPage } from '@/pages/WorkRequests/WorkRequestDetailPage'
 import { PartsPage } from '@/pages/Inventory/PartsPage'
 import { InventoryTransactionsPage } from '@/pages/Inventory/InventoryTransactionsPage'
 import { VendorsPage } from '@/pages/Purchasing/VendorsPage'
@@ -36,6 +38,8 @@ export default function AppRouter() {
             <Route path="/assets/:id" element={<AssetDetailPage />} />
             <Route path="/work-orders" element={<WorkOrdersPage />} />
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
+            <Route path="/work-requests" element={<WorkRequestsPage />} />
+            <Route path="/work-requests/:id" element={<WorkRequestDetailPage />} />
             <Route path="/pm-schedules" element={<PMSchedulesPage />} />
             <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
             <Route path="/checklists" element={<ChecklistsPage />} />
