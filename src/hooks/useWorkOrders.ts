@@ -38,24 +38,28 @@ function mapWo(wo: GASWorkOrder): WorkOrder {
     checklistTaskIds,
     assetId: wo.asset_id ? parseInt(wo.asset_id.replace('AST-', '') || '0', 10) : undefined,
     asset: wo.asset_id ? { id: 0, name: wo.asset_id, assetTag: wo.asset_id } : undefined,
+    projectId: wo.project_id || undefined,
+    discipline: wo.discipline || undefined,
     createdAt: '',
     updatedAt: '',
   }
 }
 
 function toPaged(all: WorkOrder[], params?: Record<string, string | number>): PaginatedResponse<WorkOrder> {
-  const search = String(params?.search || '').toLowerCase().trim()
-  const status = String(params?.status || '').toLowerCase().trim()
-  const page   = Number(params?.page  || 1)
-  const limit  = Number(params?.limit || all.length || 20)
+  const search    = String(params?.search    || '').toLowerCase().trim()
+  const status    = String(params?.status    || '').toLowerCase().trim()
+  const projectId = String(params?.projectId || '').trim()
+  const page      = Number(params?.page  || 1)
+  const limit     = Number(params?.limit || all.length || 20)
 
   let filtered = all
-  if (search) filtered = filtered.filter((w) =>
+  if (search)    filtered = filtered.filter((w) =>
     w.woNumber?.toLowerCase().includes(search) ||
     w.title?.toLowerCase().includes(search) ||
     w.asset?.name?.toLowerCase().includes(search)
   )
-  if (status) filtered = filtered.filter((w) => w.status === status)
+  if (status)    filtered = filtered.filter((w) => w.status === status)
+  if (projectId) filtered = filtered.filter((w) => w.projectId === projectId)
 
   const total      = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / limit))
@@ -87,21 +91,37 @@ export const useWorkOrder = (id: number) => {
   return { ...query, data: query.data?.find((w) => w.id === id) ?? null }
 }
 
+export type CreateWOBody = Partial<WorkOrder> & {
+  taskIds?: string[]
+  woType?: 'PM' | 'CM'
+  projectId?: string
+  discipline?: string
+  safetyCondition?: string
+  problemDescription?: string
+  diagnosis?: string
+  correctiveAction?: string
+}
+
 export const useCreateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<WorkOrder> & { taskIds?: string[] }) =>
+    mutationFn: async (body: CreateWOBody) =>
       gasPost<{ success: boolean; wo_id: string }>('createWorkOrder', {
-        wo_type: 'CM',
-        asset_id: body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '',
-        priority: body.priority?.toUpperCase() || 'MEDIUM',
-        status: body.status?.toUpperCase() || 'OPEN',
-        due_date: body.dueDate || '',
-        description: body.title || body.description || '',
-        problem_description: body.description || '',
-        estimated_duration: body.estimatedHours ? String(body.estimatedHours) : '',
-        task_ids: body.taskIds || [],
-        checklist: JSON.stringify(body.taskIds || []),
+        wo_type:             body.woType || 'CM',
+        asset_id:            body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '',
+        priority:            body.priority?.toUpperCase() || 'MEDIUM',
+        status:              body.status?.toUpperCase() || 'OPEN',
+        due_date:            body.dueDate || '',
+        description:         body.title || body.description || '',
+        problem_description: body.problemDescription || body.description || '',
+        diagnosis:           body.diagnosis || '',
+        corrective_action:   body.correctiveAction || '',
+        safety_condition:    body.safetyCondition || '',
+        estimated_duration:  body.estimatedHours ? String(body.estimatedHours) : '',
+        task_ids:            body.taskIds || [],
+        checklist:           JSON.stringify(body.taskIds || []),
+        project_id:          body.projectId || '',
+        discipline:          body.discipline || '',
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })

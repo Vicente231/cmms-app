@@ -46,11 +46,27 @@ export interface GASUser {
   avatar: string
 }
 
+export interface GASProject {
+  project_id: string
+  name: string
+  type: string
+  status: string
+  planned_start: string
+  planned_end: string
+  actual_start: string
+  actual_end: string
+  assets_scope: string
+  description: string
+  created_by: string
+  created_at: string
+}
+
 export interface GASAsset {
   asset_id: string
   asset_name: string
   asset_type: string
   parent_asset: string
+  feed_from: string
   location: string
   criticality: string
   status: string
@@ -83,6 +99,8 @@ export interface GASWorkOrder {
   corrective_action: string
   completion_notes: string
   checklist: unknown[]
+  project_id: string
+  discipline: string
 }
 
 export interface GASMaintenanceTask {
@@ -166,4 +184,36 @@ export interface GASAssetTypeSchema {
   unit: string
   required: boolean
   options: string[]
+}
+
+export interface GASPart {
+  part_id: string
+  part_number: string
+  name: string
+  description: string
+  category: string
+  unit: string
+  unit_cost: string | number
+  qty_on_hand: string | number
+  min_qty: string | number
+  max_qty: string | number
+  location: string
+  supplier: string
+  is_active: string | boolean
+  notes: string
+}
+
+export interface GASInventoryTransaction {
+  tx_id: string
+  part_id: string
+  part_name: string
+  part_number: string
+  tx_type: string
+  qty: string | number
+  unit_cost: string | number
+  balance_after: string | number
+  wo_id: string
+  reference: string
+  notes: string
+  created_at: string
 }

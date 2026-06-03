@@ -2,7 +2,7 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Wrench, Calendar, Box, ShoppingCart, MapPin,
   Users, Settings, ChevronDown, Building2, Shield, Tag, AlertTriangle,
-  TruckIcon, ClipboardList, BarChart3, X, ChevronLeft, ChevronRight, ClipboardCheck
+  TruckIcon, ClipboardList, BarChart3, X, ChevronLeft, ChevronRight, ClipboardCheck, FolderKanban, CalendarDays
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -20,6 +20,9 @@ const navItems: NavItem[] = [
   { label: 'Assets', href: '/assets', icon: Package },
   { label: 'Work Orders',   href: '/work-orders',   icon: Wrench },
   { label: 'Work Requests', href: '/work-requests', icon: ClipboardCheck },
+  { label: 'Projects',      href: '/projects',      icon: FolderKanban },
+  { label: 'Reports',       href: '/reports',       icon: BarChart3 },
+  { label: 'Calendar',      href: '/calendar',      icon: CalendarDays },
   {
     label: 'Preventive Maintenance', icon: Calendar, children: [
       { label: 'PM Schedules', href: '/pm-schedules', icon: Calendar },

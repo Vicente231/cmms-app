@@ -3,14 +3,17 @@ import { useState } from 'react'
 import { useWorkOrder, useWorkOrderTasks, useUpdateWorkOrderTask, useUpdateWorkOrder, useInitializeWOTasks } from '@/hooks/useWorkOrders'
 import { useMaintenanceTasks } from '@/hooks/usePMSchedules'
 import { useAsset } from '@/hooks/useAssets'
+import { useWOTransactions } from '@/hooks/useInventoryTransactions'
+import { useParts, useIssueStock } from '@/hooks/useParts'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, CheckSquare, Square, Clock, Package, MapPin, Tag, Wrench } from 'lucide-react'
+import { ArrowLeft, CheckSquare, Square, Clock, Package, MapPin, Tag, Wrench, FolderKanban, Plus } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -72,16 +75,43 @@ export function WorkOrderDetailPage() {
   const [noteValues,      setNoteValues]       = useState<Record<string, string>>({})
   const [timeValues,      setTimeValues]       = useState<Record<string, string>>({})
   const [savingStatus,    setSavingStatus]     = useState(false)
+  const [woNotes,         setWoNotes]         = useState<string | null>(null)
+  const [partsModalOpen,  setPartsModalOpen]  = useState(false)
+  const [issuePartId,     setIssuePartId]     = useState('')
+  const [issueQty,        setIssueQty]        = useState('1')
+  const [issueNotes,      setIssueNotes]      = useState('')
 
-  // Build map of template_task_id → { measurementUnit, passCondition, measurementFields }
+  const { data: woTxs = [] }   = useWOTransactions(wo?.woNumber ?? '')
+  const { data: partsPage }    = useParts({ limit: 9999 })
+  const issueStock             = useIssueStock()
+  const allParts               = partsPage?.data ?? []
+
+  // Primary lookup by task_id, fallback by description (handles template_task_id mismatches)
+  const mtByDesc = Object.fromEntries(
+    allMTasks.map(t => [t.description?.toLowerCase().trim(), t])
+  )
+  const mtById = Object.fromEntries(allMTasks.map(t => [t.task_id, t]))
+
+  const getMT = (task: typeof woTasks[0]) => {
+    const byId   = mtById[task.templateTaskId]
+    // If found by ID and description matches, trust it; otherwise fall back to description match
+    if (byId && byId.description?.toLowerCase().trim() === task.description?.toLowerCase().trim()) {
+      return byId
+    }
+    return mtByDesc[task.description?.toLowerCase().trim()] ?? byId ?? null
+  }
+
+  const toMtFields = (t: ReturnType<typeof getMT>) => t ? {
+    measurementUnit:   t.measurement_unit ?? '',
+    passCondition:     t.pass_condition   ?? '',
+    measurementFields: t.measurement_fields
+      ? t.measurement_fields.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : null,
+  } : { measurementUnit: '', passCondition: '', measurementFields: null }
+
+  // Keep backward-compat alias used in render
   const mtMap = Object.fromEntries(
-    allMTasks.map(t => [t.task_id, {
-      measurementUnit: t.measurement_unit,
-      passCondition: t.pass_condition,
-      measurementFields: t.measurement_fields
-        ? t.measurement_fields.split(',').map(s => s.trim()).filter(Boolean)
-        : null,
-    }])
+    allMTasks.map(t => [t.task_id, toMtFields(t)])
   )
 
   const toggleTask = async (taskId: string, isCompleted: boolean) => {
@@ -159,6 +189,21 @@ export function WorkOrderDetailPage() {
             )}
           </div>
           <p className="text-sm text-muted-foreground truncate">{wo.title}</p>
+          {/* Discipline + project */}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {wo.discipline && (
+              <Badge variant="outline" className="text-xs font-normal">{wo.discipline}</Badge>
+            )}
+            {wo.projectId && (
+              <button
+                onClick={() => navigate(`/projects/${wo.projectId}`)}
+                className="flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+              >
+                <FolderKanban className="h-3 w-3" />
+                {wo.projectId}
+              </button>
+            )}
+          </div>
           {/* Asset quick-view strip */}
           <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
             <span className="flex items-center gap-1 text-foreground font-medium">
@@ -219,33 +264,76 @@ export function WorkOrderDetailPage() {
               <CardContent>
                 <dl className="space-y-3 text-sm">
                   {[
-                    ['WO Type',      wo.woNumber?.startsWith('WO') ? (wo.title?.startsWith('PM') ? 'Preventive Maintenance' : 'Corrective Maintenance') : '—'],
-                    ['Requested By', wo.requester ? `${wo.requester.firstName} ${wo.requester.lastName}` : null],
-                    ['Assigned To',  wo.assignee  ? `${wo.assignee.firstName}  ${wo.assignee.lastName}`  : null],
-                    ['Team',         wo.team?.name],
-                    ['Failure Code', wo.failureCode?.code],
-                  ].map(([label, value]) => (
+                    ['Status',     wo.status?.replace(/_/g, ' ')],
+                    ['Priority',   wo.priority],
+                    ['Discipline', wo.discipline || null],
+                  ].map(([label, value]) => value ? (
                     <div key={label as string} className="flex justify-between">
                       <dt className="font-medium text-muted-foreground">{label}</dt>
-                      <dd className="text-right">{value || '—'}</dd>
+                      <dd className="text-right capitalize">{value}</dd>
                     </div>
-                  ))}
+                  ) : null)}
+                  {wo.projectId && (
+                    <div className="flex justify-between">
+                      <dt className="font-medium text-muted-foreground">Project</dt>
+                      <dd>
+                        <button
+                          onClick={() => navigate(`/projects/${wo.projectId}`)}
+                          className="text-primary hover:underline flex items-center gap-1"
+                        >
+                          <FolderKanban className="h-3.5 w-3.5" />
+                          {wo.projectId}
+                        </button>
+                      </dd>
+                    </div>
+                  )}
+                  {[
+                    ['Est. Hours',   wo.estimatedHours ? `${wo.estimatedHours}h` : null],
+                    ['Actual Hours', wo.actualHours    ? `${wo.actualHours}h`    : null],
+                  ].map(([label, value]) => value ? (
+                    <div key={label as string} className="flex justify-between">
+                      <dt className="font-medium text-muted-foreground">{label}</dt>
+                      <dd className="text-right">{value}</dd>
+                    </div>
+                  ) : null)}
                 </dl>
               </CardContent>
             </Card>
 
-            {/* Schedule & Cost */}
+            {/* Notes / Resolution */}
             <Card className="md:col-span-2">
-              <CardHeader><CardTitle>Schedule & Cost</CardTitle></CardHeader>
+              <CardHeader><CardTitle>Notes &amp; Resolution</CardTitle></CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <Textarea
+                  rows={4}
+                  placeholder="Document what was found, what was done, parts replaced, observations… (auto-saves on blur)"
+                  value={woNotes ?? (wo.description || '')}
+                  onChange={e => setWoNotes(e.target.value)}
+                  onBlur={async e => {
+                    const val = e.target.value
+                    if (val !== (wo.description || '')) {
+                      try {
+                        await updateWO.mutateAsync({ id: wo.id, description: val as never })
+                        toast({ title: 'Notes saved' })
+                      } catch {
+                        toast({ title: 'Error saving notes', variant: 'destructive' })
+                      }
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">Saves automatically when you click away.</p>
+              </CardContent>
+            </Card>
+
+            {/* Schedule */}
+            <Card className="md:col-span-2">
+              <CardHeader><CardTitle>Schedule</CardTitle></CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
                   {[
-                    ['Due Date',     wo.dueDate      ? format(new Date(wo.dueDate),      'MMM d, yyyy') : null],
-                    ['Started',      wo.startedAt    ? format(new Date(wo.startedAt),    'MMM d, yyyy HH:mm') : null],
-                    ['Completed',    wo.completedAt  ? format(new Date(wo.completedAt),  'MMM d, yyyy HH:mm') : null],
-                    ['Est. Hours',   wo.estimatedHours ? `${wo.estimatedHours}h` : null],
-                    ['Actual Hours', wo.actualHours    ? `${wo.actualHours}h`    : null],
-                    ['Total Cost',   `$${Number(wo.totalCost).toFixed(2)}`],
+                    ['Due Date',  wo.dueDate     ? format(new Date(wo.dueDate),     'MMM d, yyyy') : null],
+                    ['Started',   wo.startedAt   ? format(new Date(wo.startedAt),   'MMM d, yyyy') : null],
+                    ['Completed', wo.completedAt ? format(new Date(wo.completedAt), 'MMM d, yyyy') : null],
                   ].map(([label, value]) => (
                     <div key={label as string}>
                       <p className="font-medium text-muted-foreground text-xs mb-1">{label}</p>
@@ -255,8 +343,8 @@ export function WorkOrderDetailPage() {
                 </div>
                 {wo.description && (
                   <div className="mt-4 pt-4 border-t">
-                    <p className="text-xs font-medium text-muted-foreground mb-1">Description</p>
-                    <p className="text-sm">{wo.description}</p>
+                    <p className="text-xs font-medium text-muted-foreground mb-1">Problem Description</p>
+                    <p className="text-sm whitespace-pre-wrap">{wo.description}</p>
                   </div>
                 )}
               </CardContent>
@@ -283,7 +371,7 @@ export function WorkOrderDetailPage() {
               {woTasks.length ? (
                 <div className="space-y-2">
                   {woTasks.map((task) => {
-                    const mt = mtMap[task.templateTaskId] ?? {}
+                    const mt = toMtFields(getMT(task))
 
                     const savedJson: Record<string, string> = (() => {
                       try { return JSON.parse(task.measurementValue || '{}') } catch { return {} }
@@ -504,31 +592,93 @@ export function WorkOrderDetailPage() {
         {/* ── Parts Tab ── */}
         <TabsContent value="parts">
           <Card>
-            <CardContent className="pt-6">
-              {wo.partsUsed?.length ? (
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Parts Used</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setPartsModalOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Log Parts Used
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {woTxs.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8 text-sm">No parts logged for this work order yet.</p>
+              ) : (
                 <div className="space-y-2">
-                  {wo.partsUsed.map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div className="flex items-center gap-2">
+                  {woTxs.map(tx => (
+                    <div key={tx.id} className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="flex items-center gap-3">
                         <Package className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <p className="font-medium text-sm">{entry.part?.name}</p>
-                          <p className="text-xs text-muted-foreground">{entry.part?.partNumber}</p>
+                          <p className="font-medium text-sm">{tx.partName}</p>
+                          {tx.partNumber && <p className="text-xs text-muted-foreground font-mono">{tx.partNumber}</p>}
                         </div>
                       </div>
                       <div className="text-right text-sm">
-                        <p>Qty: {entry.quantity}</p>
-                        <p className="text-muted-foreground">${Number(entry.totalCost).toFixed(2)}</p>
+                        <p className="font-semibold">Qty: {tx.qty}</p>
+                        {tx.notes && <p className="text-xs text-muted-foreground">{tx.notes}</p>}
                       </div>
                     </div>
                   ))}
-                  <div className="flex justify-end pt-2 border-t">
-                    <p className="font-medium">Total: ${wo.partsUsed.reduce((s, p) => s + Number(p.totalCost), 0).toFixed(2)}</p>
-                  </div>
                 </div>
-              ) : <p className="text-muted-foreground text-center py-8">No parts used</p>}
+              )}
             </CardContent>
           </Card>
+
+          {/* Log Parts Used Modal */}
+          {partsModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="bg-background rounded-lg shadow-xl w-full max-w-md p-6 space-y-4">
+                <h2 className="text-lg font-semibold">Log Parts Used</h2>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Part</label>
+                  <select
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={issuePartId}
+                    onChange={e => setIssuePartId(e.target.value)}
+                  >
+                    <option value="">Select a part...</option>
+                    {allParts.map(p => (
+                      <option key={p.id} value={String(p.id)}>
+                        {p.name}{p.partNumber ? ` (${p.partNumber})` : ''} — Stock: {p.quantityOnHand} {p.unitOfMeasure}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Quantity Used</label>
+                  <Input type="number" step="0.001" min="0.001" value={issueQty} onChange={e => setIssueQty(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Notes (optional)</label>
+                  <Input placeholder="e.g. Replaced failed fuse on L1" value={issueNotes} onChange={e => setIssueNotes(e.target.value)} />
+                </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <Button variant="outline" onClick={() => setPartsModalOpen(false)}>Cancel</Button>
+                  <Button
+                    disabled={!issuePartId || !issueQty || issueStock.isPending}
+                    onClick={async () => {
+                      try {
+                        await issueStock.mutateAsync({
+                          partId: Number(issuePartId),
+                          qty:    Number(issueQty),
+                          woId:   wo?.woNumber,
+                          notes:  issueNotes,
+                        })
+                        toast({ title: 'Parts logged and stock updated' })
+                        setPartsModalOpen(false)
+                        setIssuePartId(''); setIssueQty('1'); setIssueNotes('')
+                      } catch {
+                        toast({ title: 'Error logging parts', variant: 'destructive' })
+                      }
+                    }}
+                  >
+                    {issueStock.isPending ? 'Saving...' : 'Log Parts'}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

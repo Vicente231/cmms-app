@@ -94,6 +94,7 @@ export function AssetsPage() {
       asset_name:      asset.name,
       asset_type:      asset.model || '',
       parent_asset:    asset.parentAsset?.assetTag || '',
+      feed_from:       asset.feedFrom?.assetTag || '',
       location:        asset.location?.name || '',
       criticality:     asset.criticality?.toUpperCase() || 'MEDIUM',
       status:          asset.status?.toUpperCase().replace(/ /g, '_') || 'ACTIVE',
@@ -140,6 +141,7 @@ export function AssetsPage() {
     { accessorKey: 'name', header: 'Name', cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
     { accessorKey: 'manufacturer', header: 'Manufacturer' },
     { accessorKey: 'model', header: 'Model' },
+    { accessorKey: 'feedFrom', header: 'Feed From', cell: ({ row }) => row.original.feedFrom?.assetTag || '-' },
     { accessorKey: 'location', header: 'Location', cell: ({ row }) => row.original.location?.name || '-' },
     { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge type="asset" value={row.original.status} /> },
     {
@@ -236,6 +238,10 @@ export function AssetsPage() {
             <div className="space-y-2">
               <Label>Parent Asset</Label>
               <Input {...register('parent_asset')} placeholder="AST-000001 (optional)" />
+            </div>
+            <div className="space-y-2">
+              <Label>Feed From</Label>
+              <Input {...register('feed_from')} placeholder="AST-000001 (optional)" />
             </div>
           </div>
 

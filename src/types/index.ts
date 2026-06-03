@@ -1,3 +1,22 @@
+export type ProjectType   = 'Maintenance Shutdown' | 'New Installation' | 'Commissioning' | 'Inspection' | 'Emergency Repair' | 'Upgrade / Retrofit'
+export type ProjectStatus = 'planning' | 'active' | 'completed' | 'cancelled'
+export type Discipline    = 'Mechanical' | 'Electrical' | 'Instrumentation' | 'Civil' | 'Contractor' | 'Other'
+
+export interface Project {
+  id: string
+  name: string
+  type: ProjectType
+  status: ProjectStatus
+  plannedStart: string
+  plannedEnd: string
+  actualStart: string
+  actualEnd: string
+  assetsScope: string[]
+  description: string
+  createdBy: string
+  createdAt: string
+}
+
 export type AssetStatus = 'active' | 'inactive' | 'decommissioned' | 'under_maintenance'
 export type WoStatus = 'open' | 'in_progress' | 'on_hold' | 'completed' | 'cancelled'
 export type WoPriority = 'low' | 'medium' | 'high' | 'critical'
@@ -132,6 +151,7 @@ export interface Asset {
   category?: { id: number; name: string }
   parentAssetId?: number
   parentAsset?: { id: number; name: string; assetTag?: string }
+  feedFrom?: { id: number; name: string; assetTag?: string }
   childAssets?: { id: number; name: string; assetTag?: string; status: AssetStatus }[]
   assignedTo?: number
   assignedUser?: { id: number; firstName: string; lastName: string }
@@ -240,6 +260,8 @@ export interface WorkOrder {
   totalCost: number
   requiresDowntime: boolean
   checklistTaskIds?: string[]
+  projectId?: string
+  discipline?: string
   tasks?: WoTask[]
   labor?: WoLabor[]
   partsUsed?: WoPartsUsed[]

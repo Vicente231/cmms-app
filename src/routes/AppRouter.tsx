@@ -12,6 +12,8 @@ import { MaintenanceTasksPage } from '@/pages/PM/MaintenanceTasksPage'
 import { ChecklistsPage } from '@/pages/Checklists/ChecklistsPage'
 import { WorkRequestsPage } from '@/pages/WorkRequests/WorkRequestsPage'
 import { WorkRequestDetailPage } from '@/pages/WorkRequests/WorkRequestDetailPage'
+import { ProjectsPage } from '@/pages/Projects/ProjectsPage'
+import { ProjectDetailPage } from '@/pages/Projects/ProjectDetailPage'
 import { PartsPage } from '@/pages/Inventory/PartsPage'
 import { InventoryTransactionsPage } from '@/pages/Inventory/InventoryTransactionsPage'
 import { VendorsPage } from '@/pages/Purchasing/VendorsPage'
@@ -25,6 +27,8 @@ import { WorkOrderTypesPage } from '@/pages/Settings/WorkOrderTypesPage'
 import { FailureCodesPage } from '@/pages/Settings/FailureCodesPage'
 import { PartsCategoriesPage } from '@/pages/Settings/PartsCategoriesPage'
 import { OrganizationPage } from '@/pages/Settings/OrganizationPage'
+import { ReportsPage } from '@/pages/Reports/ReportsPage'
+import { CalendarPage } from '@/pages/Calendar/CalendarPage'
 
 export default function AppRouter() {
   return (
@@ -40,6 +44,10 @@ export default function AppRouter() {
             <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />
             <Route path="/work-requests" element={<WorkRequestsPage />} />
             <Route path="/work-requests/:id" element={<WorkRequestDetailPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/pm-schedules" element={<PMSchedulesPage />} />
             <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
             <Route path="/checklists" element={<ChecklistsPage />} />

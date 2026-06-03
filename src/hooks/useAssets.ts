@@ -31,6 +31,7 @@ function mapAsset(a: GASAsset): Asset {
     description: a.notes,
     location: a.location ? { id: 0, name: a.location } : undefined,
     parentAsset: a.parent_asset ? { id: 0, name: a.parent_asset, assetTag: a.parent_asset } : undefined,
+    feedFrom: a.feed_from ? { id: 0, name: a.feed_from, assetTag: a.feed_from } : undefined,
     attrs: typeof a.attrs === 'object' && a.attrs !== null ? a.attrs as Record<string, unknown> : {},
     createdAt: a.install_date || '',
     updatedAt: '',
@@ -120,6 +121,7 @@ export type AssetFormData = {
   asset_name: string
   asset_type: string
   parent_asset: string
+  feed_from: string
   location: string
   criticality: string
   status: string
@@ -141,6 +143,7 @@ export const useCreateAsset = () => {
         asset_name:      body.asset_name      || '',
         asset_type:      body.asset_type      || '',
         parent_asset:    body.parent_asset    || '',
+        feed_from:       body.feed_from       || '',
         location:        body.location        || '',
         criticality:     body.criticality     || 'MEDIUM',
         status:          body.status          || 'ACTIVE',
@@ -167,6 +170,7 @@ export const useUpdateAsset = () => {
           asset_name:      body.asset_name,
           asset_type:      body.asset_type,
           parent_asset:    body.parent_asset,
+          feed_from:       body.feed_from,
           location:        body.location,
           criticality:     body.criticality,
           status:          body.status,
