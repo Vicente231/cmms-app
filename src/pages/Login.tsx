@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { gasGet, gasPost } from '@/lib/api'
-import type { GASUser } from '@/lib/api'
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -19,7 +17,7 @@ const loginSchema = z.object({
 const registerSchema = z.object({
   name: z.string().min(2, 'Name is required'),
   email: z.string().email('Invalid email address'),
-  password: z.string().min(4, 'Password must be at least 4 characters'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
 })
 
 type LoginFormData = z.infer<typeof loginSchema>
@@ -27,7 +25,7 @@ type RegisterFormData = z.infer<typeof registerSchema>
 
 export default function Login() {
   const navigate = useNavigate()
-  const login = useAuthStore((s) => s.login)
+  const { login, register } = useAuthStore()
   const [serverError, setServerError] = useState<string | null>(null)
   const [mode, setMode] = useState<'login' | 'register'>('login')
 
@@ -37,11 +35,7 @@ export default function Login() {
   const onLogin = loginForm.handleSubmit(async (data) => {
     try {
       setServerError(null)
-      const res = await gasGet<{ success?: boolean; error?: string; token: string; user: GASUser }>(
-        'login',
-        { email: data.email, password: data.password }
-      )
-      login(res.user, res.token)
+      await login(data.email, data.password)
       navigate('/', { replace: true })
     } catch (err: unknown) {
       setServerError((err as Error).message || 'Login failed. Please try again.')
@@ -51,16 +45,7 @@ export default function Login() {
   const onRegister = registerForm.handleSubmit(async (data) => {
     try {
       setServerError(null)
-      const res = await gasPost<{ success?: boolean; error?: string; user: GASUser }>(
-        'register',
-        { name: data.name, email: data.email, password: data.password }
-      )
-      // After register, log in automatically
-      const loginRes = await gasGet<{ success?: boolean; token: string; user: GASUser }>(
-        'login',
-        { email: data.email, password: data.password }
-      )
-      login(loginRes.user, loginRes.token)
+      await register(data.name, data.email, data.password)
       navigate('/', { replace: true })
     } catch (err: unknown) {
       setServerError((err as Error).message || 'Registration failed. Please try again.')

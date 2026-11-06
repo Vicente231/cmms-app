@@ -67,10 +67,52 @@ export function InventoryTransactionsPage() {
         </div>
       </div>
 
+      {/* Mobile card list */}
+      {!isLoading && (
+        <div className="lg:hidden space-y-2">
+          {filtered.length === 0 ? (
+            <div className="rounded-lg border bg-background p-8 text-center text-sm text-muted-foreground">No transactions found.</div>
+          ) : filtered.map(t => {
+            const cfg  = TX_CONFIG[t.txType] ?? TX_CONFIG.ADJUSTED
+            const Icon = cfg.icon
+            const part = allParts.find(p => 'PRT-' + String(p.id).padStart(6, '0') === t.partId)
+            return (
+              <div key={t.id} className="rounded-lg border bg-background p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-sm">{t.partName || part?.name || t.partId}</p>
+                    {(t.partNumber || part?.partNumber) && <p className="font-mono text-xs text-muted-foreground">{t.partNumber || part?.partNumber}</p>}
+                  </div>
+                  <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium shrink-0', cfg.cls)}>
+                    <Icon className="h-3 w-3" />{cfg.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className={cn('font-mono font-bold text-lg', t.txType === 'ISSUED' ? 'text-red-600' : 'text-green-600')}>
+                    {cfg.sign}{Math.abs(t.qty)}
+                  </span>
+                  <span className="text-xs text-muted-foreground">→ balance: <span className="font-mono font-medium text-foreground">{t.balanceAfter}</span></span>
+                  {t.unitCost > 0 && <span className="text-xs text-muted-foreground">${t.unitCost.toFixed(2)}/unit</span>}
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{t.createdAt ? format(new Date(t.createdAt), 'MMM d, yyyy') : '—'}</span>
+                  {t.woId ? (
+                    <button onClick={() => navigate(`/work-orders/${t.woId.replace('WO-', '')}`)} className="flex items-center gap-1 text-primary font-mono">
+                      {t.woId} <ExternalLink className="h-3 w-3" />
+                    </button>
+                  ) : t.reference ? <span>{t.reference}</span> : null}
+                </div>
+                {t.notes && <p className="text-xs text-muted-foreground border-t pt-1">{t.notes}</p>}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex items-center justify-center h-48 text-muted-foreground">Loading transactions...</div>
       ) : (
-        <Card>
+        <Card className="hidden lg:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/30">

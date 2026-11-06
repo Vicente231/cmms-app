@@ -1,12 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useAsset } from '@/hooks/useAssets'
 import { useWorkOrders } from '@/hooks/useWorkOrders'
+import { useAssetDrawings, useUploadDrawing, useDeleteAssetDrawing } from '@/hooks/useAssetDrawings'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { ArrowLeft, Package, ExternalLink, Plus, CheckCircle2, Clock, Printer, QrCode } from 'lucide-react'
+import { ArrowLeft, Package, ExternalLink, Plus, CheckCircle2, Clock, Printer, QrCode, FileText, File, Upload, Trash2, Loader2 } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 import { cn } from '@/lib/utils'
 import type { WorkOrder } from '@/types'
@@ -19,7 +22,30 @@ export function AssetDetailPage() {
   const navigate = useNavigate()
   const qrRef    = useRef<HTMLDivElement>(null)
   const { data: asset, isLoading } = useAsset(+id!)
-  const { data: woPage } = useWorkOrders({ limit: 9999 })
+  const { data: woPage }           = useWorkOrders({ limit: 9999 })
+  const { data: drawings = [] }    = useAssetDrawings(+id!)
+  const uploadDrawing              = useUploadDrawing(+id!)
+  const deleteDrawing              = useDeleteAssetDrawing(+id!)
+
+  const [drawingName, setDrawingName] = useState('')
+  const [revision,    setRevision]    = useState('')
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPendingFile(file)
+    if (!drawingName) setDrawingName(file.name.replace(/\.[^.]+$/, ''))
+    e.target.value = ''
+  }
+
+  const handleUpload = async () => {
+    if (!pendingFile || !drawingName.trim()) return
+    await uploadDrawing.mutateAsync({ file: pendingFile, drawingName: drawingName.trim(), revision: revision.trim() })
+    setPendingFile(null)
+    setDrawingName('')
+    setRevision('')
+  }
 
   const handlePrintQR = () => {
     const el = qrRef.current
@@ -94,6 +120,9 @@ export function AssetDetailPage() {
           <TabsTrigger value="meters">Meters ({asset.meters?.length || 0})</TabsTrigger>
           <TabsTrigger value="custom-fields">Specs ({asset.customFields?.length || 0})</TabsTrigger>
           <TabsTrigger value="children">Sub-Assets ({asset.childAssets?.length || 0})</TabsTrigger>
+          <TabsTrigger value="drawings">
+            <FileText className="h-3.5 w-3.5 mr-1 inline" />Drawings ({drawings.length})
+          </TabsTrigger>
           <TabsTrigger value="qr"><QrCode className="h-3.5 w-3.5 mr-1 inline" />QR</TabsTrigger>
         </TabsList>
 
@@ -252,6 +281,86 @@ export function AssetDetailPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        {/* ── Drawings ── */}
+        <TabsContent value="drawings" className="space-y-4 mt-2">
+          <Card>
+            <CardHeader><CardTitle className="text-base">Upload Drawing</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Drawing Name *</Label>
+                  <Input placeholder="e.g. P&ID Sheet 1" value={drawingName} onChange={e => setDrawingName(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Revision</Label>
+                  <Input placeholder="e.g. Rev B" value={revision} onChange={e => setRevision(e.target.value)} />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <label className={cn(
+                  'flex flex-1 items-center gap-2 cursor-pointer rounded-md border border-dashed px-3 py-2 text-sm transition-colors',
+                  pendingFile ? 'border-primary/60 bg-primary/5' : 'border-muted-foreground/30 hover:border-foreground/40'
+                )}>
+                  <File className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className={cn('truncate', pendingFile ? 'text-foreground' : 'text-muted-foreground')}>
+                    {pendingFile ? pendingFile.name : 'Choose PDF or DWG file…'}
+                  </span>
+                  <input type="file" accept=".pdf,.dwg" className="sr-only" onChange={handleFileChange} />
+                </label>
+                <Button
+                  disabled={!pendingFile || !drawingName.trim() || uploadDrawing.isPending}
+                  onClick={handleUpload}
+                >
+                  {uploadDrawing.isPending
+                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Uploading…</>
+                    : <><Upload className="h-4 w-4 mr-2" />Upload</>}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Max recommended size: 30 MB. Larger DWG files should be linked from Drive directly.</p>
+            </CardContent>
+          </Card>
+
+
+          <Card>
+            <CardContent className="pt-6">
+              {drawings.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">No drawings uploaded yet</p>
+              ) : (
+                <div className="divide-y">
+                  {drawings.map(d => (
+                    <div key={d.drawingId} className="flex items-center gap-3 py-3">
+                      {d.fileType === 'pdf'
+                        ? <FileText className="h-5 w-5 text-red-500 shrink-0" />
+                        : <File     className="h-5 w-5 text-blue-500 shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{d.drawingName}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {d.revision && <span className="mr-2">{d.revision}</span>}
+                          <span className="uppercase font-mono text-xs">{d.fileType}</span>
+                          {d.uploadedDate && <span className="ml-2">{format(new Date(d.uploadedDate), 'MMM d, yyyy')}</span>}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button variant="outline" size="sm" onClick={() => window.open(`https://drive.google.com/file/d/${d.driveFileId}/view#zoom=150`, '_blank')}>
+                          <ExternalLink className="h-4 w-4 mr-1" /> Open in Drive
+                        </Button>
+                        <Button
+                          variant="outline" size="sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={deleteDrawing.isPending}
+                          onClick={() => deleteDrawing.mutate({ drawingId: d.drawingId, driveFileId: d.driveFileId })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* ── QR Code ── */}
         <TabsContent value="qr">
           <Card>
@@ -280,6 +389,7 @@ export function AssetDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
     </div>
   )
 }

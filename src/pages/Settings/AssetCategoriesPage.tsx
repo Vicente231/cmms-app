@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { gasGet, gasPost } from '@/lib/api'
-import type { GASAssetType, GASAssetTypeSchema } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
+import type { AppliesTo, GASAssetType, GASAssetTypeSchema } from '@/lib/api'
+import { KEY_TYPES, KEY_SCHEMAS } from '@/hooks/useEquipmentTypes'
 import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -15,10 +16,25 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Pencil, Trash2, Table2 } from 'lucide-react'
 import { useForm, Controller, useWatch } from 'react-hook-form'
 
-const KEY_TYPES   = 'asset-categories'
-const KEY_SCHEMAS = 'asset-type-schemas'
-
 const DATA_TYPES = ['number', 'text', 'select', 'date', 'boolean']
+
+const APPLIES_TO: { value: AppliesTo; label: string }[] = [
+  { value: 'both',  label: 'Assets & Parts' },
+  { value: 'asset', label: 'Assets only' },
+  { value: 'part',  label: 'Parts only' },
+]
+const appliesLabel = (v?: AppliesTo) => APPLIES_TO.find(a => a.value === (v || 'both'))?.label ?? 'Assets & Parts'
+
+function AppliesToSelect({ value, onChange }: { value?: AppliesTo; onChange: (v: AppliesTo) => void }) {
+  return (
+    <Select value={value || 'both'} onValueChange={v => onChange(v as AppliesTo)}>
+      <SelectTrigger><SelectValue /></SelectTrigger>
+      <SelectContent>
+        {APPLIES_TO.map(a => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  )
+}
 
 // ── Types page ────────────────────────────────────────────────────────────────
 
@@ -40,24 +56,37 @@ export function AssetCategoriesPage() {
   // ── Asset Types queries ──────────────────────────────────────────────────
   const { data: types, isLoading } = useQuery({
     queryKey: [KEY_TYPES],
-    queryFn: () => gasGet<GASAssetType[]>('assetTypes'),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('asset_types').select('*')
+      if (error) throw error
+      return (data ?? []) as GASAssetType[]
+    },
   })
 
   const createType = useMutation({
-    mutationFn: (body: Partial<GASAssetType>) =>
-      gasPost<{ success: boolean }>('createAssetType', body as Record<string, unknown>),
+    mutationFn: async (body: Partial<GASAssetType>) => {
+      const { error } = await supabase.from('asset_types').insert(body as Record<string, unknown>)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY_TYPES] }),
   })
 
   const updateType = useMutation({
-    mutationFn: ({ type_code, ...updates }: Partial<GASAssetType> & { type_code: string }) =>
-      gasPost<{ success: boolean }>('updateAssetType', { type_code, updates }),
+    mutationFn: async ({ type_code, ...updates }: Partial<GASAssetType> & { type_code: string }) => {
+      const { error } = await supabase.from('asset_types').update(updates).eq('type_code', type_code)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY_TYPES] }),
   })
 
   const removeType = useMutation({
-    mutationFn: (type_code: string) =>
-      gasPost<{ success: boolean }>('deleteAssetType', { type_code }),
+    mutationFn: async (type_code: string) => {
+      const { error } = await supabase.from('asset_types').delete().eq('type_code', type_code)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [KEY_TYPES] })
       qc.invalidateQueries({ queryKey: [KEY_SCHEMAS] })
@@ -67,58 +96,65 @@ export function AssetCategoriesPage() {
   // ── Schema queries ───────────────────────────────────────────────────────
   const { data: allSchemas } = useQuery({
     queryKey: [KEY_SCHEMAS],
-    queryFn: () => gasGet<GASAssetTypeSchema[]>('assetTypeSchemas'),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('asset_type_schemas').select('*')
+      if (error) throw error
+      return (data ?? []) as GASAssetTypeSchema[]
+    },
   })
 
-  const schemasForType = (allSchemas || []).filter(
-    (s) => s.type_code === schemaType?.type_code
-  )
+  const schemasForType = (allSchemas || [])
+    .filter((s) => s.type_code === schemaType?.type_code)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
   const createSchema = useMutation({
-    mutationFn: (body: Partial<GASAssetTypeSchema>) =>
-      gasPost<{ success: boolean }>('createAssetTypeSchema', {
+    mutationFn: async (body: Partial<GASAssetTypeSchema>) => {
+      const { error } = await supabase.from('asset_type_schemas').insert({
         ...body,
-        options: Array.isArray(body.options) ? body.options.join(',') : body.options || '',
-      }),
+        options: Array.isArray(body.options) ? body.options : [],
+      })
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY_SCHEMAS] }),
   })
 
   const updateSchema = useMutation({
-    mutationFn: ({ type_code, field_key, ...updates }: Partial<GASAssetTypeSchema> & { type_code: string; field_key: string }) =>
-      gasPost<{ success: boolean }>('updateAssetTypeSchema', {
-        type_code,
-        field_key,
-        updates: {
-          ...updates,
-          options: Array.isArray(updates.options) ? updates.options.join(',') : updates.options || '',
-        },
-      }),
+    mutationFn: async ({ type_code, field_key, ...updates }: Partial<GASAssetTypeSchema> & { type_code: string; field_key: string }) => {
+      const { error } = await supabase.from('asset_type_schemas').update({
+        ...updates,
+        options: Array.isArray(updates.options) ? updates.options : [],
+      }).eq('type_code', type_code).eq('field_key', field_key)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY_SCHEMAS] }),
   })
 
   const removeSchema = useMutation({
-    mutationFn: (s: GASAssetTypeSchema) =>
-      gasPost<{ success: boolean }>('deleteAssetTypeSchema', {
-        type_code: s.type_code,
-        field_key: s.field_key,
-      }),
+    mutationFn: async (s: GASAssetTypeSchema) => {
+      const { error } = await supabase.from('asset_type_schemas')
+        .delete().eq('type_code', s.type_code).eq('field_key', s.field_key)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY_SCHEMAS] }),
   })
 
   // ── Type form ────────────────────────────────────────────────────────────
   const typeForm = useForm<Partial<GASAssetType>>()
 
-  const openCreateType = () => { setEditType(null); typeForm.reset({}); setTypeModalOpen(true) }
+  const openCreateType = () => { setEditType(null); typeForm.reset({ applies_to: 'both' }); setTypeModalOpen(true) }
   const openEditType   = (t: GASAssetType) => { setEditType(t); typeForm.reset(t); setTypeModalOpen(true) }
 
   const onSubmitType = typeForm.handleSubmit(async (data) => {
     try {
       if (editType) {
         await updateType.mutateAsync({ type_code: editType.type_code, ...data })
-        toast({ title: 'Asset type updated' })
+        toast({ title: 'Type updated' })
       } else {
         await createType.mutateAsync(data)
-        toast({ title: 'Asset type created' })
+        toast({ title: 'Type created' })
       }
       setTypeModalOpen(false)
     } catch (err) {
@@ -132,7 +168,11 @@ export function AssetCategoriesPage() {
 
   const openCreateSchema = () => {
     setEditSchema(null)
-    schemaForm.reset({ type_code: schemaType?.type_code, required: false, data_type: 'text' })
+    const maxOrder = Math.max(0, ...schemasForType.map(s => s.sort_order ?? 0))
+    schemaForm.reset({
+      type_code: schemaType?.type_code, required: false, data_type: 'text',
+      applies_to: schemaType?.applies_to || 'both', section: '', sort_order: maxOrder + 10,
+    })
     setSchemaModalOpen(true)
   }
 
@@ -150,6 +190,7 @@ export function AssetCategoriesPage() {
       const options = typeof data.options === 'string'
         ? (data.options as string).split(',').map((o) => o.trim()).filter(Boolean)
         : data.options || []
+      data.sort_order = Number(data.sort_order) || 0
 
       if (editSchema) {
         await updateSchema.mutateAsync({
@@ -194,8 +235,13 @@ export function AssetCategoriesPage() {
         : '-',
     },
     {
+      accessorKey: 'applies_to',
+      header: 'Used For',
+      cell: ({ row }) => <span className="text-xs">{appliesLabel(row.original.applies_to)}</span>,
+    },
+    {
       accessorKey: 'schemas',
-      header: 'Schema Fields',
+      header: 'Spec Fields',
       cell: ({ row }) => {
         const count = (allSchemas || []).filter((s) => s.type_code === row.original.type_code).length
         return (
@@ -224,6 +270,8 @@ export function AssetCategoriesPage() {
   ]
 
   const schemaColumns: ColumnDef<GASAssetTypeSchema>[] = [
+    { accessorKey: 'sort_order', header: '#', cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.original.sort_order ?? 0}</span> },
+    { accessorKey: 'section',   header: 'Section',   cell: ({ row }) => row.original.section || '-' },
     { accessorKey: 'field_key', header: 'Key',       cell: ({ row }) => <span className="font-mono text-sm">{row.original.field_key}</span> },
     { accessorKey: 'label',     header: 'Label',     cell: ({ row }) => row.original.label },
     { accessorKey: 'data_type', header: 'Type',      cell: ({ row }) => <span className="capitalize">{row.original.data_type}</span> },
@@ -234,6 +282,11 @@ export function AssetCategoriesPage() {
       cell: ({ row }) => row.original.required
         ? <span className="text-xs font-medium text-green-600">Yes</span>
         : <span className="text-xs text-muted-foreground">No</span>,
+    },
+    {
+      accessorKey: 'applies_to',
+      header: 'Used For',
+      cell: ({ row }) => <span className="text-xs">{appliesLabel(row.original.applies_to)}</span>,
     },
     {
       accessorKey: 'options',
@@ -258,8 +311,8 @@ export function AssetCategoriesPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Asset Types</h1>
-        <p className="text-muted-foreground">Manage asset type classifications and their schema fields</p>
+        <h1 className="text-2xl font-bold">Equipment Types</h1>
+        <p className="text-muted-foreground">Types and spec fields shared by assets and spare parts (motors, VFDs, sensors…)</p>
       </div>
 
       {/* ── Asset Types table ── */}
@@ -268,7 +321,7 @@ export function AssetCategoriesPage() {
         data={types || []}
         isLoading={isLoading}
         onAddNew={openCreateType}
-        addNewLabel="Add Asset Type"
+        addNewLabel="Add Type"
       />
 
       {/* ── Schema manager panel (shown below table when a type is selected) ── */}
@@ -278,9 +331,9 @@ export function AssetCategoriesPage() {
             <div>
               <h2 className="font-semibold">
                 <span className="text-xl mr-2">{schemaType.icon}</span>
-                {schemaType.label} — Schema Fields
+                {schemaType.label} — Spec Fields
               </h2>
-              <p className="text-sm text-muted-foreground">Fields collected for every asset of this type</p>
+              <p className="text-sm text-muted-foreground">Fields collected for every asset or part of this type, grouped by section</p>
             </div>
             <div className="flex gap-2">
               <Button size="sm" onClick={openCreateSchema}>Add Field</Button>
@@ -300,7 +353,7 @@ export function AssetCategoriesPage() {
       <CRUDModal
         open={typeModalOpen}
         onOpenChange={setTypeModalOpen}
-        title={editType ? 'Edit Asset Type' : 'Add Asset Type'}
+        title={editType ? 'Edit Type' : 'Add Type'}
         onSubmit={onSubmitType}
         isLoading={createType.isPending || updateType.isPending}
       >
@@ -320,6 +373,14 @@ export function AssetCategoriesPage() {
           <div className="space-y-2">
             <Label>Color</Label>
             <Input {...typeForm.register('color')} placeholder="e.g. amber, red, blue" />
+          </div>
+          <div className="space-y-2">
+            <Label>Used For</Label>
+            <Controller
+              control={typeForm.control}
+              name="applies_to"
+              render={({ field }) => <AppliesToSelect value={field.value} onChange={field.onChange} />}
+            />
           </div>
         </div>
       </CRUDModal>
@@ -370,6 +431,25 @@ export function AssetCategoriesPage() {
             </div>
           </div>
 
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Section</Label>
+              <Input {...schemaForm.register('section')} placeholder="e.g. Electrical" />
+            </div>
+            <div className="space-y-2">
+              <Label>Order</Label>
+              <Input type="number" {...schemaForm.register('sort_order')} placeholder="10" />
+            </div>
+            <div className="space-y-2">
+              <Label>Used For</Label>
+              <Controller
+                control={schemaForm.control}
+                name="applies_to"
+                render={({ field }) => <AppliesToSelect value={field.value} onChange={field.onChange} />}
+              />
+            </div>
+          </div>
+
           {watchedDataType === 'select' && (
             <div className="space-y-2">
               <Label>Options <span className="text-muted-foreground text-xs">(comma-separated)</span></Label>
@@ -406,7 +486,7 @@ export function AssetCategoriesPage() {
           catch (err) { toast({ title: (err as Error).message || 'Error', variant: 'destructive' }) }
         }}
         isLoading={removeType.isPending}
-        description="This will delete the asset type and all its schema fields. Assets of this type must be removed first."
+        description="This will delete the type and all its spec fields. Assets and parts of this type must be changed first."
       />
 
       {/* ── Delete Schema Field confirm ── */}
@@ -418,7 +498,7 @@ export function AssetCategoriesPage() {
           catch (err) { toast({ title: (err as Error).message || 'Error', variant: 'destructive' }) }
         }}
         isLoading={removeSchema.isPending}
-        description="This will permanently delete this schema field."
+        description="This will permanently delete this spec field. Values already saved on assets or parts are kept but no longer shown in the form."
       />
     </div>
   )

@@ -2,7 +2,8 @@ import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Package, Wrench, Calendar, Box, ShoppingCart, MapPin,
   Users, Settings, ChevronDown, Building2, Shield, Tag, AlertTriangle,
-  TruckIcon, ClipboardList, BarChart3, X, ChevronLeft, ChevronRight, ClipboardCheck, FolderKanban, CalendarDays
+  TruckIcon, ClipboardList, BarChart3, X, ChevronLeft, ChevronRight, ClipboardCheck, FolderKanban, CalendarDays,
+  Activity, Sliders, Cog, FileText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useState } from 'react'
@@ -25,9 +26,17 @@ const navItems: NavItem[] = [
   { label: 'Calendar',      href: '/calendar',      icon: CalendarDays },
   {
     label: 'Preventive Maintenance', icon: Calendar, children: [
-      { label: 'PM Schedules', href: '/pm-schedules', icon: Calendar },
-      { label: 'Maintenance Tasks', href: '/maintenance-tasks', icon: ClipboardList },
-      { label: 'Checklists', href: '/checklists', icon: BarChart3 },
+      { label: 'PM Dashboard',       href: '/pm',                icon: LayoutDashboard },
+      { label: 'PM Schedules',       href: '/pm-schedules',      icon: Calendar        },
+      { label: 'Maintenance Tasks',  href: '/maintenance-tasks', icon: ClipboardList   },
+      { label: 'Checklists',         href: '/checklists',        icon: BarChart3       },
+      { label: 'Bearing Reference',  href: '/bearing-reference', icon: Cog             },
+    ],
+  },
+  {
+    label: 'Predictive Maintenance', icon: Activity, children: [
+      { label: 'PdM Dashboard', href: '/pdm', icon: Activity },
+      { label: 'Thresholds', href: '/pdm/thresholds', icon: Sliders },
     ],
   },
   {
@@ -40,6 +49,7 @@ const navItems: NavItem[] = [
     label: 'Purchasing', icon: ShoppingCart, children: [
       { label: 'Vendors', href: '/purchasing/vendors', icon: TruckIcon },
       { label: 'Purchase Orders', href: '/purchasing/orders', icon: ClipboardList },
+      { label: 'Purchase Requisitions', href: '/purchasing/requisitions', icon: FileText },
     ],
   },
   { label: 'Locations', href: '/locations', icon: MapPin },
@@ -49,7 +59,7 @@ const navItems: NavItem[] = [
       { label: 'Users', href: '/settings/users', icon: Users },
       { label: 'Roles', href: '/settings/roles', icon: Shield },
       { label: 'Teams', href: '/settings/teams', icon: Users },
-      { label: 'Asset Categories', href: '/settings/asset-categories', icon: Tag },
+      { label: 'Equipment Types', href: '/settings/asset-categories', icon: Tag },
       { label: 'Work Order Types', href: '/settings/work-order-types', icon: Wrench },
       { label: 'Failure Codes', href: '/settings/failure-codes', icon: AlertTriangle },
       { label: 'Parts Categories', href: '/settings/parts-categories', icon: Tag },
@@ -64,15 +74,18 @@ interface SidebarProps {
   onToggleCollapse: () => void
 }
 
-function NavItemComponent({ item, depth = 0, collapsed }: { item: NavItem; depth?: number; collapsed: boolean }) {
-  const [expanded, setExpanded] = useState(true)
+function NavItemComponent({ item, depth = 0, collapsed, onClose, expandedLabel, onExpand }: {
+  item: NavItem; depth?: number; collapsed: boolean; onClose?: () => void
+  expandedLabel?: string; onExpand?: (label: string) => void
+}) {
+  const expanded = expandedLabel === item.label
   const Icon = item.icon
 
   if (item.children) {
     return (
       <div>
         <button
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => onExpand?.(expanded ? '' : item.label)}
           className={cn(
             'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors',
             collapsed && 'lg:justify-center lg:px-2'
@@ -85,7 +98,7 @@ function NavItemComponent({ item, depth = 0, collapsed }: { item: NavItem; depth
         </button>
         <div className={cn('ml-4 mt-1 space-y-1', (!expanded || collapsed) && 'lg:hidden', !expanded && 'hidden')}>
           {item.children.map((child) => (
-            <NavItemComponent key={child.href} item={child} depth={depth + 1} collapsed={collapsed} />
+            <NavItemComponent key={child.href} item={child} depth={depth + 1} collapsed={collapsed} onClose={onClose} />
           ))}
         </div>
       </div>
@@ -96,6 +109,7 @@ function NavItemComponent({ item, depth = 0, collapsed }: { item: NavItem; depth
     <NavLink
       to={item.href!}
       end={item.href === '/'}
+      onClick={onClose}
       className={({ isActive }) =>
         cn(
           'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
@@ -114,6 +128,7 @@ function NavItemComponent({ item, depth = 0, collapsed }: { item: NavItem; depth
 }
 
 export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarProps) {
+  const [expandedLabel, setExpandedLabel] = useState('')
   return (
     <>
       {/* Mobile backdrop */}
@@ -148,7 +163,7 @@ export function Sidebar({ open, onClose, collapsed, onToggleCollapse }: SidebarP
 
         <nav className={cn('flex-1 overflow-y-auto p-4 space-y-1', collapsed && 'lg:px-2')}>
           {navItems.map((item) => (
-            <NavItemComponent key={item.href || item.label} item={item} collapsed={collapsed} />
+            <NavItemComponent key={item.href || item.label} item={item} collapsed={collapsed} onClose={onClose} expandedLabel={expandedLabel} onExpand={setExpandedLabel} />
           ))}
         </nav>
       </aside>

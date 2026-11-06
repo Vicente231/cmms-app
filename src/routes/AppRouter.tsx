@@ -8,8 +8,10 @@ import { AssetDetailPage } from '@/pages/Assets/AssetDetailPage'
 import { WorkOrdersPage } from '@/pages/WorkOrders/WorkOrdersPage'
 import { WorkOrderDetailPage } from '@/pages/WorkOrders/WorkOrderDetailPage'
 import { PMSchedulesPage } from '@/pages/PM/PMSchedulesPage'
+import { PMDashboard } from '@/pages/PM/PMDashboard'
 import { MaintenanceTasksPage } from '@/pages/PM/MaintenanceTasksPage'
 import { ChecklistsPage } from '@/pages/Checklists/ChecklistsPage'
+import { BearingReferencePage } from '@/pages/PM/BearingReferencePage'
 import { WorkRequestsPage } from '@/pages/WorkRequests/WorkRequestsPage'
 import { WorkRequestDetailPage } from '@/pages/WorkRequests/WorkRequestDetailPage'
 import { ProjectsPage } from '@/pages/Projects/ProjectsPage'
@@ -18,6 +20,7 @@ import { PartsPage } from '@/pages/Inventory/PartsPage'
 import { InventoryTransactionsPage } from '@/pages/Inventory/InventoryTransactionsPage'
 import { VendorsPage } from '@/pages/Purchasing/VendorsPage'
 import { PurchaseOrdersPage } from '@/pages/Purchasing/PurchaseOrdersPage'
+import { PurchaseRequisitionsPage } from '@/pages/Purchasing/PurchaseRequisitionsPage'
 import { LocationsPage } from '@/pages/Locations/LocationsPage'
 import { UsersPage } from '@/pages/Settings/UsersPage'
 import { RolesPage } from '@/pages/Settings/RolesPage'
@@ -29,6 +32,8 @@ import { PartsCategoriesPage } from '@/pages/Settings/PartsCategoriesPage'
 import { OrganizationPage } from '@/pages/Settings/OrganizationPage'
 import { ReportsPage } from '@/pages/Reports/ReportsPage'
 import { CalendarPage } from '@/pages/Calendar/CalendarPage'
+import { PdMDashboard } from '@/pages/PdM/PdMDashboard'
+import { ThresholdsPage } from '@/pages/PdM/ThresholdsPage'
 
 export default function AppRouter() {
   return (
@@ -48,13 +53,18 @@ export default function AppRouter() {
             <Route path="/projects/:id" element={<ProjectDetailPage />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/pm" element={<PMDashboard />} />
             <Route path="/pm-schedules" element={<PMSchedulesPage />} />
             <Route path="/maintenance-tasks" element={<MaintenanceTasksPage />} />
             <Route path="/checklists" element={<ChecklistsPage />} />
+            <Route path="/bearing-reference" element={<BearingReferencePage />} />
+            <Route path="/pdm" element={<PdMDashboard />} />
+            <Route path="/pdm/thresholds" element={<ThresholdsPage />} />
             <Route path="/inventory/parts" element={<PartsPage />} />
             <Route path="/inventory/transactions" element={<InventoryTransactionsPage />} />
             <Route path="/purchasing/vendors" element={<VendorsPage />} />
             <Route path="/purchasing/orders" element={<PurchaseOrdersPage />} />
+            <Route path="/purchasing/requisitions" element={<PurchaseRequisitionsPage />} />
             <Route path="/locations" element={<LocationsPage />} />
             <Route path="/settings/organization" element={<OrganizationPage />} />
             <Route path="/settings/users" element={<UsersPage />} />

@@ -193,6 +193,33 @@ export function PMSchedulesPage() {
         totalPages={data?.pagination.totalPages}
         onPageChange={setPage}
         total={data?.pagination.total}
+        mobileCard={(pm) => {
+          const due = pm.nextDueDate
+          const overdue = due && isPast(new Date(due))
+          const assetCount = (pm.targetId ?? '').split(',').filter(Boolean).length
+          return (
+            <div className="rounded-lg border bg-background p-4 space-y-2">
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-semibold text-sm flex-1 leading-tight">{pm.name}</p>
+                <Badge variant={pm.isActive ? 'default' : 'secondary'} className="shrink-0 text-xs">{pm.isActive ? 'Active' : 'Inactive'}</Badge>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline" className="text-xs">{assetCount} asset{assetCount !== 1 ? 's' : ''}</Badge>
+                {(pm.taskIds ?? []).length > 0 && <Badge variant="secondary" className="text-xs">{(pm.taskIds ?? []).length} tasks</Badge>}
+                <StatusBadge type="priority" value={pm.priority} />
+                <span className="text-xs text-muted-foreground">{pm.frequencyValue} {pm.frequencyUnit}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className={cn('text-xs font-medium', overdue ? 'text-red-600' : 'text-muted-foreground')}>
+                  {due ? `Due: ${format(new Date(due), 'MMM d, yyyy')}` : 'No due date'}
+                </span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => handleGenerateWO(pm)} disabled={generateWO.isPending}>
+                  <Play className="h-3 w-3 mr-1" />Generate
+                </Button>
+              </div>
+            </div>
+          )
+        }}
       />
 
       <CRUDModal open={modalOpen} onOpenChange={setModalOpen} title={editPM ? 'Edit PM Schedule' : 'New PM Schedule'} onSubmit={onSubmit} isLoading={create.isPending || update.isPending} size="lg">

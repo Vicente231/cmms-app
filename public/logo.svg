@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0055CC"/>
+      <stop offset="100%" stop-color="#003A99"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="430" cy="82" r="58" fill="none" stroke="#FFD000" stroke-width="8" opacity="0.25"/>
+  <circle cx="430" cy="82" r="34" fill="#FFD000" opacity="0.12"/>
+  <text x="256" y="300" font-family="'Arial Black',Arial,sans-serif" font-weight="900" font-size="198" fill="#FFD000" text-anchor="middle" letter-spacing="-6">VCC</text>
+  <rect x="108" y="322" width="296" height="4" rx="2" fill="#FFD000" opacity="0.6"/>
+  <text x="256" y="400" font-family="Arial,sans-serif" font-weight="700" font-size="52" fill="#FFD000" text-anchor="middle" letter-spacing="14" opacity="0.85">CMMS</text>
+</svg>

@@ -144,6 +144,29 @@ export function ProjectsPage() {
         isLoading={isLoading}
         onAddNew={openCreate}
         addNewLabel="New Project"
+        mobileCard={(p) => (
+          <button
+            onClick={() => navigate(`/projects/${p.id}`)}
+            className="w-full text-left rounded-lg border bg-background p-4 space-y-2 hover:bg-accent/40 active:bg-accent/60 transition-colors"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <span className="font-mono text-xs font-semibold text-muted-foreground">{p.id}</span>
+              <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium capitalize shrink-0', PROJECT_STATUS_COLORS[p.status])}>
+                {p.status}
+              </span>
+            </div>
+            <p className="font-semibold text-sm">{p.name}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', PROJECT_TYPE_COLORS[p.type])}>
+                {p.type}
+              </span>
+              {p.assetsScope.length > 0 && <span className="text-xs text-muted-foreground">{p.assetsScope.length} asset{p.assetsScope.length !== 1 ? 's' : ''}</span>}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {p.plannedStart ? format(new Date(p.plannedStart), 'MMM d') : '—'} → {p.plannedEnd ? format(new Date(p.plannedEnd), 'MMM d, yyyy') : '—'}
+              </span>
+            </div>
+          </button>
+        )}
       />
 
       <CRUDModal

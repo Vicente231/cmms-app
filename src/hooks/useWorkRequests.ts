@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { gasGet, gasPost } from '@/lib/api'
+import { supabase, fetchAll } from '@/lib/supabase'
+import { gasPost } from '@/lib/api'
 import type { GASWorkRequest, GASWorkRequestItem } from '@/lib/api'
 import type { WorkRequest, WorkRequestItem, WrStatus, WrItemStatus, WrItemType, WoPriority } from '@/types'
 
@@ -8,17 +9,27 @@ const ITEMS_KEY = 'wr-items'
 
 function mapWR(r: GASWorkRequest): WorkRequest {
   return {
-    id:            r.wr_id,
-    assetId:       r.asset_id       || '',
-    assetName:     r.asset_name     || '',
-    description:   r.description    || '',
-    priority:      (r.priority?.toLowerCase() as WoPriority) || 'medium',
-    requestedBy:   r.requested_by   || '',
-    requestDate:   r.request_date   || '',
-    status:        (r.status?.toLowerCase() as WrStatus) || 'reported',
-    convertedToWo: r.converted_to_wo || '',
-    imageUrls:     (() => { try { return JSON.parse(r.image_urls || '[]') } catch { return [] } })(),
-    notes:         r.notes          || '',
+    id:              r.wr_id,
+    assetId:         r.asset_id        || '',
+    assetName:       r.asset_name      || '',
+    assetLocation:   r.asset_location  || '',
+    description:     r.description     || '',
+    priority:        (r.priority?.toLowerCase() as WoPriority) || 'medium',
+    requestedBy:     r.requested_by    || '',
+    requestDate:     r.request_date    || '',
+    status:          (r.status?.toLowerCase() as WrStatus) || 'reported',
+    convertedToWo:   r.converted_to_wo || '',
+    imageUrls:       (() => { try { return JSON.parse(r.image_urls || '[]') } catch { return [] } })(),
+    notes:           r.notes           || '',
+    department:      r.department      || '',
+    contactPhone:    r.contact_phone   || '',
+    requestType:     r.request_type    || '',
+    failureMode:     r.failure_mode    || '',
+    machineDown:     r.machine_down === true || r.machine_down === 'true' || r.machine_down === 'TRUE',
+    productionImpact: r.production_impact || '',
+    safetyConcern:   r.safety_concern === true || r.safety_concern === 'true' || r.safety_concern === 'TRUE',
+    safetyDetail:    r.safety_detail   || '',
+    preferredDate:   r.preferred_date  || '',
   }
 }
 
@@ -62,8 +73,8 @@ const useAllWorkRequests = () =>
   useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASWorkRequest[]>('workRequests')
-      return rows.map(mapWR)
+      const data = await fetchAll<GASWorkRequest>('work_requests')
+      return data.map(mapWR)
     },
   })
 
@@ -82,16 +93,32 @@ export const useWorkRequest = (id: string) => {
 export const useCreateWorkRequest = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: {
+    mutationFn: async (body: {
       asset_id: string
       asset_name: string
+      asset_location: string
       description: string
       priority: string
       image_urls: string[]
-    }) => gasPost<{ success: boolean; wr_id: string }>('createWorkRequest', {
-      ...body,
-      image_urls: JSON.stringify(body.image_urls || []),
-    }),
+      department: string
+      contact_phone: string
+      request_type: string
+      failure_mode: string
+      machine_down: boolean
+      production_impact: string
+      safety_concern: boolean
+      safety_detail: string
+      preferred_date: string
+    }) => {
+      const { error } = await supabase.from('work_requests').insert({
+        ...body,
+        request_date: new Date().toISOString().split('T')[0],
+        status: 'reported',
+        image_urls: JSON.stringify(body.image_urls || []),
+      })
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -99,8 +126,14 @@ export const useCreateWorkRequest = () => {
 export const useUpdateWorkRequest = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Record<string, unknown> }) =>
-      gasPost<{ success: boolean }>('updateWorkRequest', { wr_id: id, updates }),
+    mutationFn: async ({ id, updates }: { id: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('work_requests').update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      }).eq('wr_id', id)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -108,8 +141,11 @@ export const useUpdateWorkRequest = () => {
 export const useDeleteWorkRequest = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) =>
-      gasPost<{ success: boolean }>('deleteWorkRequest', { wr_id: id }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('work_requests').delete().eq('wr_id', id)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -118,8 +154,9 @@ export const useWorkRequestItems = (wrId: string) =>
   useQuery({
     queryKey: [ITEMS_KEY, wrId],
     queryFn: async () => {
-      const rows = await gasGet<GASWorkRequestItem[]>('workRequestItems')
-      return rows.filter(r => r.wr_id === wrId).map(mapItem)
+      const { data, error } = await supabase.from('work_request_items').select('*').eq('wr_id', wrId)
+      if (error) throw error
+      return (data ?? []).map(mapItem)
     },
     enabled: !!wrId,
   })
@@ -127,16 +164,20 @@ export const useWorkRequestItems = (wrId: string) =>
 export const useCreateWorkRequestItem = (wrId: string) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: {
+    mutationFn: async (body: {
       item_type: WrItemType
       description: string
       quantity: string
       unit: string
       supplier: string
       notes: string
-    }) => gasPost<{ success: boolean; item_id: string }>('createWorkRequestItem', {
-      wr_id: wrId, ...body, status: 'pending',
-    }),
+    }) => {
+      const { data, error } = await supabase.from('work_request_items').insert({
+        wr_id: wrId, ...body, status: 'pending',
+      }).select('item_id').single()
+      if (error) throw error
+      return { success: true, item_id: data.item_id }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [ITEMS_KEY, wrId] }),
   })
 }
@@ -144,8 +185,11 @@ export const useCreateWorkRequestItem = (wrId: string) => {
 export const useUpdateWorkRequestItem = (wrId: string) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ itemId, updates }: { itemId: string; updates: Record<string, unknown> }) =>
-      gasPost<{ success: boolean }>('updateWorkRequestItem', { item_id: itemId, updates }),
+    mutationFn: async ({ itemId, updates }: { itemId: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('work_request_items').update(updates).eq('item_id', itemId)
+      if (error) throw error
+      return { success: true }
+    },
     onMutate: async ({ itemId, updates }) => {
       await qc.cancelQueries({ queryKey: [ITEMS_KEY, wrId] })
       const previous = qc.getQueryData<WorkRequestItem[]>([ITEMS_KEY, wrId])
@@ -164,8 +208,11 @@ export const useUpdateWorkRequestItem = (wrId: string) => {
 export const useDeleteWorkRequestItem = (wrId: string) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (itemId: string) =>
-      gasPost<{ success: boolean }>('deleteWorkRequestItem', { item_id: itemId }),
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase.from('work_request_items').delete().eq('item_id', itemId)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [ITEMS_KEY, wrId] }),
   })
 }
@@ -174,10 +221,11 @@ export const useUploadImage = () =>
   useMutation({
     mutationFn: async (file: File) => {
       const base64 = await compressImage(file)
-      return gasPost<{ success: boolean; url: string; id: string }>('uploadImage', {
-        base64,
-        filename: file.name,
-        mimeType: 'image/jpeg',
-      })
+      const res = await gasPost<{ success: boolean; url: string; error?: string }>(
+        'uploadImage',
+        { base64, mimeType: 'image/jpeg', filename: `WR_${Date.now()}.jpg` }
+      )
+      if (!res.success || !res.url) throw new Error(res.error ?? 'Upload failed')
+      return { success: true, url: res.url, id: Date.now().toString() }
     },
   })

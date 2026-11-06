@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { gasGet, gasPost } from '@/lib/api'
-import type { GASWorkOrder, GASWorkOrderTask } from '@/lib/api'
+import { supabase, fetchAll } from '@/lib/supabase'
+import type { GASWorkOrder, GASWorkOrderTask, GASMaintenanceTask } from '@/lib/api'
 import type { WorkOrder, WorkOrderTask, WoStatus, WoPriority, PaginatedResponse } from '@/types'
 
 const KEY = 'work-orders'
@@ -40,6 +40,9 @@ function mapWo(wo: GASWorkOrder): WorkOrder {
     asset: wo.asset_id ? { id: 0, name: wo.asset_id, assetTag: wo.asset_id } : undefined,
     projectId: wo.project_id || undefined,
     discipline: wo.discipline || undefined,
+    completionNotes: wo.completion_notes || undefined,
+    completionImageUrls: (() => { try { return JSON.parse(wo.completion_image_urls || '[]') } catch { return [] } })(),
+    completedBy: wo.completed_by || undefined,
     createdAt: '',
     updatedAt: '',
   }
@@ -64,10 +67,9 @@ function toPaged(all: WorkOrder[], params?: Record<string, string | number>): Pa
   const total      = filtered.length
   const totalPages = Math.max(1, Math.ceil(total / limit))
   const start      = (page - 1) * limit
-  const data       = filtered.slice(start, start + limit)
 
   return {
-    data,
+    data: filtered.slice(start, start + limit),
     pagination: { total, page, limit, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
   }
 }
@@ -76,8 +78,8 @@ const useAllWorkOrders = () =>
   useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASWorkOrder[]>('workOrders')
-      return rows.map(mapWo)
+      const data = await fetchAll<GASWorkOrder>('work_orders')
+      return data.map(mapWo)
     },
   })
 
@@ -100,17 +102,22 @@ export type CreateWOBody = Partial<WorkOrder> & {
   problemDescription?: string
   diagnosis?: string
   correctiveAction?: string
+  assignedTo?: string
+  assetTag?: string
 }
 
 export const useCreateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: CreateWOBody) =>
-      gasPost<{ success: boolean; wo_id: string }>('createWorkOrder', {
+    mutationFn: async (body: CreateWOBody) => {
+      const assetId = body.assetTag
+        ?? (body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '')
+      const { error } = await supabase.from('work_orders').insert({
         wo_type:             body.woType || 'CM',
-        asset_id:            body.assetId ? 'AST-' + String(body.assetId).padStart(6, '0') : '',
+        asset_id:            assetId,
+        assigned_to:         body.assignedTo || '',
         priority:            body.priority?.toUpperCase() || 'MEDIUM',
-        status:              body.status?.toUpperCase() || 'OPEN',
+        status:              'OPEN',
         due_date:            body.dueDate || '',
         description:         body.title || body.description || '',
         problem_description: body.problemDescription || body.description || '',
@@ -118,11 +125,19 @@ export const useCreateWorkOrder = () => {
         corrective_action:   body.correctiveAction || '',
         safety_condition:    body.safetyCondition || '',
         estimated_duration:  body.estimatedHours ? String(body.estimatedHours) : '',
-        task_ids:            body.taskIds || [],
-        checklist:           JSON.stringify(body.taskIds || []),
+        checklist:           body.taskIds || [],
         project_id:          body.projectId || '',
         discipline:          body.discipline || '',
-      }),
+      })
+      if (error) throw error
+      // Fetch the newly generated WO ID (separate query avoids RETURNING/RLS issue)
+      const { data: latest } = await supabase.from('work_orders')
+        .select('wo_id')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      return { success: true, wo_id: latest?.wo_id ?? '' }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -130,19 +145,23 @@ export const useCreateWorkOrder = () => {
 export const useUpdateWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<WorkOrder> & { id: number }) =>
-      gasPost<{ success: boolean }>('updateWorkOrder', {
-        wo_id: toWoId(id),
-        updates: {
-          priority: body.priority?.toUpperCase(),
-          status: body.status?.toUpperCase(),
-          due_date: body.dueDate,
-          description: body.title || body.description,
-          problem_description: body.description,
-          estimated_duration: body.estimatedHours ? String(body.estimatedHours) : undefined,
-          actual_duration: body.actualHours ? String(body.actualHours) : undefined,
-        },
-      }),
+    mutationFn: async ({ id, ...body }: Partial<WorkOrder> & { id: number }) => {
+      const patch: Record<string, unknown> = { updated_at: new Date().toISOString() }
+      if (body.priority   !== undefined) patch.priority            = body.priority.toUpperCase()
+      if (body.status     !== undefined) patch.status              = body.status.toUpperCase()
+      if (body.dueDate    !== undefined) patch.due_date            = body.dueDate
+      if (body.title      !== undefined) patch.description         = body.title
+      if (body.description !== undefined) patch.problem_description = body.description
+      if (body.estimatedHours !== undefined) patch.estimated_duration = String(body.estimatedHours)
+      if (body.actualHours    !== undefined) patch.actual_duration    = String(body.actualHours)
+      if (body.completionNotes     !== undefined) patch.completion_notes      = body.completionNotes
+      if (body.completedBy         !== undefined) patch.completed_by          = body.completedBy
+      if (body.completionImageUrls !== undefined) patch.completion_image_urls = JSON.stringify(body.completionImageUrls)
+
+      const { error } = await supabase.from('work_orders').update(patch).eq('wo_id', toWoId(id))
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -150,8 +169,11 @@ export const useUpdateWorkOrder = () => {
 export const useDeleteWorkOrder = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) =>
-      gasPost<{ success: boolean }>('deleteWorkOrder', { wo_id: toWoId(id) }),
+    mutationFn: async (id: number) => {
+      const { error } = await supabase.from('work_orders').delete().eq('wo_id', toWoId(id))
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -174,8 +196,9 @@ export const useWorkOrderTasks = (woId: number) => {
   return useQuery({
     queryKey: ['wo-tasks', woId],
     queryFn: async () => {
-      const rows = await gasGet<GASWorkOrderTask[]>('workOrderTasks')
-      return rows.filter(t => t.wo_id === woIdStr).map(mapWoTask)
+      const { data, error } = await supabase.from('work_order_tasks').select('*').eq('wo_id', woIdStr)
+      if (error) throw error
+      return (data ?? []).map(mapWoTask)
     },
     enabled: !!woId,
   })
@@ -184,11 +207,26 @@ export const useWorkOrderTasks = (woId: number) => {
 export const useInitializeWOTasks = (woId: number) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (taskIds: string[]) =>
-      gasPost<{ success: boolean; created: number }>('initializeWOTasks', {
-        wo_id: toWoId(woId),
-        task_ids: taskIds,
-      }),
+    mutationFn: async (taskIds: string[]) => {
+      if (!taskIds.length) return { success: true, created: 0 }
+      const { data: templates, error: tErr } = await supabase
+        .from('maintenance_tasks').select('*').in('task_id', taskIds)
+      if (tErr) throw tErr
+      if (!templates?.length) return { success: true, created: 0 }
+      const { data, error } = await supabase.from('work_order_tasks').insert(
+        (templates as GASMaintenanceTask[]).map(t => ({
+          wo_id:            toWoId(woId),
+          template_task_id: t.task_id,
+          task_description: t.description,
+          is_completed:     false,
+          completion_notes: '',
+          time_spent_minutes: null,
+          measurement_value: '',
+        }))
+      ).select()
+      if (error) throw error
+      return { success: true, created: data?.length ?? 0 }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wo-tasks', woId] }),
   })
 }
@@ -196,8 +234,11 @@ export const useInitializeWOTasks = (woId: number) => {
 export const useUpdateWorkOrderTask = (woId: number) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ taskId, updates }: { taskId: string; updates: Record<string, unknown> }) =>
-      gasPost<{ success: boolean }>('updateWorkOrderTask', { task_id: taskId, updates }),
+    mutationFn: async ({ taskId, updates }: { taskId: string; updates: Record<string, unknown> }) => {
+      const { error } = await supabase.from('work_order_tasks').update(updates).eq('task_id', taskId)
+      if (error) throw error
+      return { success: true }
+    },
     onMutate: async ({ taskId, updates }) => {
       await qc.cancelQueries({ queryKey: ['wo-tasks', woId] })
       const previous = qc.getQueryData<WorkOrderTask[]>(['wo-tasks', woId])
@@ -221,18 +262,87 @@ export const useUpdateWorkOrderTask = (woId: number) => {
   })
 }
 
+function calculateNextDueDate(pm: { next_due_date: string; frequency_value: number | string; frequency_unit: string }): string {
+  const base = pm.next_due_date ? new Date(pm.next_due_date) : new Date()
+  const v = Number(pm.frequency_value) || 1
+  const next = new Date(base)
+  switch (pm.frequency_unit) {
+    case 'days':   next.setDate(next.getDate() + v); break
+    case 'weeks':  next.setDate(next.getDate() + v * 7); break
+    case 'months': next.setMonth(next.getMonth() + v); break
+    case 'years':  next.setFullYear(next.getFullYear() + v); break
+    default:       next.setMonth(next.getMonth() + v)
+  }
+  return next.toISOString().split('T')[0]
+}
+
+export const useGenerateWO = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const pmId = 'PM-' + String(id).padStart(6, '0')
+      const { data: pm, error: pmErr } = await supabase.from('pm_schedules').select('*').eq('pm_id', pmId).single()
+      if (pmErr) throw pmErr
+
+      let assets: { asset_id: string; asset_name: string }[] = []
+      const targetIds = String(pm.target_id || '').split(',').map((s: string) => s.trim()).filter(Boolean)
+
+      if (pm.target_type === 'asset') {
+        const { data } = await supabase.from('assets').select('asset_id,asset_name').in('asset_id', targetIds)
+        assets = data ?? []
+      } else if (pm.target_type === 'location') {
+        const { data } = await supabase.from('assets').select('asset_id,asset_name').in('location', targetIds)
+        assets = data ?? []
+      } else {
+        const { data } = await supabase.from('assets').select('asset_id,asset_name').in('asset_type', targetIds)
+        assets = data ?? []
+      }
+
+      if (!assets.length) return { success: true, created: 0, wo_ids: [] }
+
+      const { data: createdWOs, error: woErr } = await supabase.from('work_orders').insert(
+        assets.map(a => ({
+          wo_type:             'PM',
+          asset_id:            a.asset_id,
+          priority:            pm.priority || 'MEDIUM',
+          status:              'OPEN',
+          description:         pm.name,
+          problem_description: pm.description || '',
+          estimated_duration:  pm.estimated_hours ? String(pm.estimated_hours) : '',
+          checklist:           pm.task_ids ? JSON.parse(typeof pm.task_ids === 'string' ? pm.task_ids : '[]') : [],
+        }))
+      ).select('wo_id')
+      if (woErr) throw woErr
+
+      await supabase.from('pm_schedules').update({
+        last_generated_date: new Date().toISOString().split('T')[0],
+        next_due_date:       calculateNextDueDate(pm),
+        updated_at:          new Date().toISOString(),
+      }).eq('pm_id', pmId)
+
+      return { success: true, created: createdWOs?.length ?? 0, wo_ids: (createdWOs ?? []).map(w => w.wo_id) }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [KEY] })
+      qc.invalidateQueries({ queryKey: ['pm-schedules'] })
+    },
+  })
+}
+
 export const useDashboardStats = () =>
   useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: async () => {
-      const wos = await gasGet<GASWorkOrder[]>('workOrders')
+      const { data: wos, error } = await supabase.from('work_orders').select('status,due_date')
+      if (error) throw error
+      const all = wos ?? []
       const statuses = ['OPEN', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED']
       const byStatus = statuses.map((s) => ({
         status: s.toLowerCase(),
-        _count: { status: wos.filter((w) => w.status === s).length },
+        _count: { status: all.filter((w) => w.status === s).length },
       }))
-      const open = wos.filter((w) => w.status === 'OPEN').length
-      const overdue = wos.filter(
+      const open = all.filter((w) => w.status === 'OPEN').length
+      const overdue = all.filter(
         (w) =>
           w.status !== 'COMPLETED' &&
           w.status !== 'CANCELLED' &&

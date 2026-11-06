@@ -1,0 +1,19 @@
+{
+  "name": "CMMS — Maintenance Management",
+  "short_name": "CMMS",
+  "description": "Computerized Maintenance Management System",
+  "start_url": "/cmms-app/",
+  "scope": "/cmms-app/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#1e40af",
+  "icons": [
+    {
+      "src": "/cmms-app/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

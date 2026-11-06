@@ -5,10 +5,10 @@ import { DataTable } from '@/components/shared/DataTable'
 import { CRUDModal } from '@/components/shared/CRUDModal'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { StatusBadge } from '@/components/shared/StatusBadge'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/use-toast'
 import type { ColumnDef } from '@tanstack/react-table'
 import type { PurchaseOrder, PoStatus } from '@/types'
@@ -20,14 +20,14 @@ const poStatuses: PoStatus[] = ['draft', 'submitted', 'approved', 'ordered', 'pa
 
 export function PurchaseOrdersPage() {
   const { toast } = useToast()
-  const [page, setPage] = useState(1)
+  const [page, setPage]     = useState(1)
   const [search, setSearch] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
-  const [deleteId, setDeleteId] = useState<number | null>(null)
-  const [editPO, setEditPO] = useState<PurchaseOrder | null>(null)
+  const [deleteId, setDeleteId]   = useState<number | null>(null)
+  const [editPO, setEditPO]       = useState<PurchaseOrder | null>(null)
 
   const { data, isLoading } = usePurchaseOrders({ page, limit: 20 })
-  const { data: vendors } = useVendors({ limit: 100 })
+  const { data: vendors }   = useVendors({ limit: 100 })
   const create = useCreatePurchaseOrder()
   const update = useUpdatePurchaseOrder()
   const remove = useDeletePurchaseOrder()
@@ -35,7 +35,7 @@ export function PurchaseOrdersPage() {
   const { register, handleSubmit, control, reset } = useForm<Partial<PurchaseOrder>>()
 
   const openCreate = () => { setEditPO(null); reset({}); setModalOpen(true) }
-  const openEdit = (po: PurchaseOrder) => { setEditPO(po); reset(po); setModalOpen(true) }
+  const openEdit   = (po: PurchaseOrder) => { setEditPO(po); reset(po); setModalOpen(true) }
 
   const onSubmit = handleSubmit(async (data) => {
     try {
@@ -52,12 +52,12 @@ export function PurchaseOrdersPage() {
   }
 
   const columns: ColumnDef<PurchaseOrder>[] = [
-    { accessorKey: 'poNumber', header: 'PO #', cell: ({ row }) => <span className="font-mono text-sm font-medium">{row.original.poNumber}</span> },
-    { accessorKey: 'vendor', header: 'Vendor', cell: ({ row }) => row.original.vendor?.name || '-' },
-    { accessorKey: 'status', header: 'Status', cell: ({ row }) => <StatusBadge type="po" value={row.original.status} /> },
-    { accessorKey: 'orderDate', header: 'Order Date', cell: ({ row }) => row.original.orderDate ? format(new Date(row.original.orderDate), 'MMM d, yyyy') : '-' },
-    { accessorKey: 'expectedDate', header: 'Expected', cell: ({ row }) => row.original.expectedDate ? format(new Date(row.original.expectedDate), 'MMM d, yyyy') : '-' },
-    { accessorKey: 'total', header: 'Total', cell: ({ row }) => `$${Number(row.original.total).toFixed(2)}` },
+    { accessorKey: 'poNumber',    header: 'PO #',       cell: ({ row }) => <span className="font-mono text-sm font-medium">{row.original.poNumber}</span> },
+    { accessorKey: 'vendor',      header: 'Vendor',      cell: ({ row }) => row.original.vendor?.name || '-' },
+    { accessorKey: 'status',      header: 'Status',      cell: ({ row }) => <StatusBadge type="po" value={row.original.status} /> },
+    { accessorKey: 'orderDate',   header: 'Order Date',  cell: ({ row }) => row.original.orderDate ? format(new Date(row.original.orderDate), 'MMM d, yyyy') : '-' },
+    { accessorKey: 'expectedDate', header: 'Expected',   cell: ({ row }) => row.original.expectedDate ? format(new Date(row.original.expectedDate), 'MMM d, yyyy') : '-' },
+    { accessorKey: 'total',       header: 'Total',       cell: ({ row }) => `$${Number(row.original.total).toFixed(2)}` },
     {
       id: 'actions', header: 'Actions', cell: ({ row }) => (
         <div className="flex gap-1">
@@ -70,8 +70,18 @@ export function PurchaseOrdersPage() {
 
   return (
     <div className="space-y-4">
-      <div><h1 className="text-2xl font-bold">Purchase Orders</h1><p className="text-muted-foreground">Manage purchasing and procurement</p></div>
-      <DataTable columns={columns} data={data?.data || []} isLoading={isLoading} onAddNew={openCreate} addNewLabel="New PO" searchValue={search} onSearchChange={setSearch} page={page} totalPages={data?.pagination.totalPages} onPageChange={setPage} total={data?.pagination.total} />
+      <div>
+        <h1 className="text-2xl font-bold">Purchase Orders</h1>
+        <p className="text-muted-foreground">Manage purchasing and procurement</p>
+      </div>
+
+      <DataTable
+        columns={columns} data={data?.data || []} isLoading={isLoading}
+        onAddNew={openCreate} addNewLabel="New PO"
+        searchValue={search} onSearchChange={setSearch}
+        page={page} totalPages={data?.pagination.totalPages} onPageChange={setPage} total={data?.pagination.total}
+      />
+
       <CRUDModal open={modalOpen} onOpenChange={setModalOpen} title={editPO ? 'Edit Purchase Order' : 'New Purchase Order'} onSubmit={onSubmit} isLoading={create.isPending || update.isPending} size="lg">
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2 space-y-2">
@@ -101,7 +111,8 @@ export function PurchaseOrdersPage() {
           <div className="col-span-2 space-y-2"><Label>Notes</Label><Input {...register('notes')} /></div>
         </div>
       </CRUDModal>
-      <ConfirmDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)} onConfirm={handleDelete} isLoading={remove.isPending} />
+
+      <ConfirmDialog open={!!deleteId} onOpenChange={o => !o && setDeleteId(null)} onConfirm={handleDelete} isLoading={remove.isPending} />
     </div>
   )
 }

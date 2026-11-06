@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { gasGet, gasPost } from '@/lib/api'
+import { supabase, fetchAll } from '@/lib/supabase'
 import type { GASAsset } from '@/lib/api'
 import type { Asset, AssetStatus, PaginatedResponse } from '@/types'
 
@@ -38,41 +38,14 @@ function mapAsset(a: GASAsset): Asset {
   }
 }
 
-function toPaged(all: Asset[], params?: Record<string, string | number>): PaginatedResponse<Asset> {
-  const search = String(params?.search || '').toLowerCase().trim()
-  const page   = Number(params?.page  || 1)
-  const limit  = Number(params?.limit || all.length || 20)
-
-  const filtered = search
-    ? all.filter((a) =>
-        a.name?.toLowerCase().includes(search) ||
-        a.assetTag?.toLowerCase().includes(search) ||
-        a.manufacturer?.toLowerCase().includes(search) ||
-        a.serialNumber?.toLowerCase().includes(search) ||
-        a.model?.toLowerCase().includes(search) ||
-        a.location?.name?.toLowerCase().includes(search)
-      )
-    : all
-
-  const total      = filtered.length
-  const totalPages = Math.max(1, Math.ceil(total / limit))
-  const start      = (page - 1) * limit
-  const data       = filtered.slice(start, start + limit)
-
-  return {
-    data,
-    pagination: { total, page, limit, totalPages, hasNext: page < totalPages, hasPrev: page > 1 },
-  }
-}
-
 type AssetSearchField = 'name' | 'id' | 'type' | 'parent' | 'location' | 'criticality' | 'status'
 
 export const useAssets = (search = '', page = 1, limit = 20, searchField: AssetSearchField = 'name') => {
   const query = useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASAsset[]>('assets')
-      return rows.map(mapAsset)
+      const data = await fetchAll<GASAsset>('assets')
+      return data.map(mapAsset)
     },
   })
 
@@ -109,8 +82,8 @@ export const useAsset = (id: number) => {
   const query = useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASAsset[]>('assets')
-      return rows.map(mapAsset)
+      const data = await fetchAll<GASAsset>('assets')
+      return data.map(mapAsset)
     },
     enabled: !!id,
   })
@@ -138,8 +111,8 @@ export type AssetFormData = {
 export const useCreateAsset = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (body: Partial<AssetFormData>) =>
-      gasPost<{ success: boolean; asset_id: string }>('createAsset', {
+    mutationFn: async (body: Partial<AssetFormData>) => {
+      const { data, error } = await supabase.from('assets').insert({
         asset_name:      body.asset_name      || '',
         asset_type:      body.asset_type      || '',
         parent_asset:    body.parent_asset    || '',
@@ -153,9 +126,13 @@ export const useCreateAsset = () => {
         serial_number:   body.serial_number   || '',
         install_date:    body.install_date    || '',
         warranty_expiry: body.warranty_expiry || '',
+        last_pm_date:    '',
         notes:           body.notes           || '',
         attrs:           body.attrs           || {},
-      }),
+      }).select('asset_id').single()
+      if (error) throw error
+      return { success: true, asset_id: data.asset_id }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -163,27 +140,28 @@ export const useCreateAsset = () => {
 export const useUpdateAsset = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, ...body }: Partial<AssetFormData> & { id: number }) =>
-      gasPost<{ success: boolean }>('updateAsset', {
-        asset_id: toAssetId(id),
-        updates: {
-          asset_name:      body.asset_name,
-          asset_type:      body.asset_type,
-          parent_asset:    body.parent_asset,
-          feed_from:       body.feed_from,
-          location:        body.location,
-          criticality:     body.criticality,
-          status:          body.status,
-          manufacturer:    body.manufacturer,
-          vendor:          body.vendor,
-          part_number:     body.part_number,
-          serial_number:   body.serial_number,
-          install_date:    body.install_date,
-          warranty_expiry: body.warranty_expiry,
-          notes:           body.notes,
-          attrs:           body.attrs,
-        },
-      }),
+    mutationFn: async ({ assetTag, ...body }: Partial<AssetFormData> & { assetTag: string }) => {
+      const { error } = await supabase.from('assets').update({
+        asset_name:      body.asset_name,
+        asset_type:      body.asset_type,
+        parent_asset:    body.parent_asset,
+        feed_from:       body.feed_from,
+        location:        body.location,
+        criticality:     body.criticality,
+        status:          body.status,
+        manufacturer:    body.manufacturer,
+        vendor:          body.vendor,
+        part_number:     body.part_number,
+        serial_number:   body.serial_number,
+        install_date:    body.install_date    || null,
+        warranty_expiry: body.warranty_expiry || null,
+        notes:           body.notes,
+        attrs:           body.attrs,
+        updated_at:      new Date().toISOString(),
+      }).eq('asset_id', assetTag)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -191,8 +169,11 @@ export const useUpdateAsset = () => {
 export const useDeleteAsset = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: number) =>
-      gasPost<{ success: boolean }>('deleteAsset', { asset_id: toAssetId(id) }),
+    mutationFn: async (assetTag: string) => {
+      const { error } = await supabase.from('assets').delete().eq('asset_id', assetTag)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }

@@ -144,17 +144,24 @@ export function ProjectDetailPage() {
   const onNewWOSubmit = async (data: { title: string; priority: WoPriority; dueDate: string; discipline: string }) => {
     try {
       await createWO.mutateAsync({
-        title:      data.title,
-        priority:   data.priority,
-        dueDate:    data.dueDate || undefined,
-        woType:     'CM',
-        projectId:  id,
-        discipline: data.discipline !== NONE ? data.discipline : undefined,
+        title:              data.title,
+        priority:           data.priority || 'medium',
+        status:             'open' as const,
+        dueDate:            data.dueDate || undefined,
+        woType:             'CM',
+        projectId:          id,
+        discipline:         data.discipline !== NONE ? data.discipline : undefined,
+        problemDescription: '',
+        taskIds:            [],
       })
       toast({ title: 'Work order created' })
       setNewWOOpen(false)
-    } catch {
-      toast({ title: 'Error', variant: 'destructive' })
+    } catch (err) {
+      toast({
+        title: 'Failed to create work order',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      })
     }
   }
 

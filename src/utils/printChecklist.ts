@@ -1,5 +1,6 @@
 import type { Asset } from '@/types'
 import type { GASMaintenanceTask } from '@/lib/api'
+import { lookupBearing } from './bearingReference'
 
 export type OperationMode = 'RUNNING' | 'LOCKOUT' | 'ALL'
 
@@ -8,7 +9,7 @@ export interface ChecklistConfig {
   name: string
   pmId: string
   pmName: string
-  location: string
+  location: string[]
   assetType: string        // asset type code (e.g. 'MOT'), empty if not applicable
   pmTargetType: string     // 'asset_type' | 'group' | 'location' | 'asset'
   pmTargetId: string       // the raw target_id from the PM schedule
@@ -21,7 +22,13 @@ export interface ChecklistConfig {
 const STORAGE_KEY = 'cmms_checklist_configs'
 
 export function loadConfigs(): ChecklistConfig[] {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+  try {
+    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as (ChecklistConfig & { location: string | string[] })[]
+    return raw.map(c => ({
+      ...c,
+      location: Array.isArray(c.location) ? c.location : c.location ? [c.location] : [],
+    }))
+  } catch { return [] }
 }
 
 export function saveConfigs(configs: ChecklistConfig[]): void {
@@ -104,18 +111,43 @@ export async function openPrintChecklist(
     legendRows.push(`<div style="display:flex;margin-bottom:2px;">${legendItems.slice(i, i + 2).join('')}</div>`)
   }
 
+  function greaseTip(bearing: string): string {
+    if (!bearing) return ''
+    const entry = lookupBearing(bearing)
+    if (!entry) return bearing
+    const sh = Math.ceil(entry.grams / 1.25)
+    return `${bearing}: ${entry.grams}g · ${sh} shots`
+  }
+
   function motorRow(a: Asset, isInactive = false): string {
     const hpVal = hp(a)
     const hpStr = hpVal != null ? `${hpVal} HP` : '—'
     const tag   = a.assetTag ?? ''
     const name  = a.name ?? ''
 
+    const hasGreaseTask = taskCols.some(t =>
+      t.description.toLowerCase().includes('grease') || t.description.toLowerCase().includes('lubric')
+    )
+    const bearingDE  = String(a.attrs?.['bearing_de']  ?? a.attrs?.['Bearing DE']  ?? a.attrs?.['bearing de']  ?? '').trim()
+    const bearingNDE = String(a.attrs?.['bearing_nde'] ?? a.attrs?.['Bearing NDE'] ?? a.attrs?.['bearing nde'] ?? '').trim()
+    const deNote  = greaseTip(bearingDE)
+    const ndeNote = greaseTip(bearingNDE)
+    const bearingLine = hasGreaseTask && (deNote || ndeNote)
+      ? `<div style="font-size:6.5px;color:#1a6b1a;margin-top:2px;line-height:1.5;">` +
+        `${deNote  ? `<span style="background:#f0faf0;padding:1px 3px;border-radius:2px;margin-right:4px;">DE: ${deNote}</span>`  : ''}` +
+        `${ndeNote ? `<span style="background:#f0faf0;padding:1px 3px;border-radius:2px;">NDE: ${ndeNote}</span>` : ''}` +
+        `</div>`
+      : ''
+
     const cbCols = isInactive
       ? taskCols.map(() => `<td style="text-align:center;border:1px solid #ddd;color:#bbb;font-size:8px;">—</td>`).join('')
       : taskCols.map(t => {
           const isGrease = t.description.toLowerCase().includes('grease') || t.description.toLowerCase().includes('lubric')
-          if (isGrease && hpVal != null && hpVal <= 30) {
-            return `<td style="text-align:center;border:1px solid #ddd;font-size:7px;color:#aaa;background:#f8f8f8;">N/A</td>`
+          if (isGrease) {
+            const lubType = String(a.attrs?.['lubrication_type'] ?? a.attrs?.['lubrication type'] ?? '').toLowerCase().trim()
+            if (lubType === 'sealed' || lubType === 'oil') {
+              return `<td style="text-align:center;border:1px solid #ddd;font-size:7px;color:#aaa;background:#f8f8f8;">N/A</td>`
+            }
           }
           const s = safetyStyle(t.safety)
           const cellBg = (t.safety ?? '').toUpperCase().includes('RUNNING') ? '#f0faf0' : '#fff8f4'
@@ -155,6 +187,7 @@ export async function openPrintChecklist(
         <td style="padding:3px 5px;border:1px solid #ddd;${isInactive ? 'color:#aaa;font-style:italic;' : ''}">
           <div style="font-size:7px;color:#999;font-family:monospace;line-height:1.2;">${tag}</div>
           <div style="font-weight:bold;font-size:9px;line-height:1.3;">${name}</div>
+          ${bearingLine}
           ${isInactive ? '<span style="font-size:7px;background:#fcc;color:#c00;padding:1px 3px;border-radius:2px;font-weight:bold;">INACTIVE</span>' : ''}
         </td>
         <td style="text-align:center;border:1px solid #ddd;font-size:9px;font-weight:bold;color:#1a6b1a;white-space:nowrap;">${hpStr}</td>
@@ -241,7 +274,7 @@ export async function openPrintChecklist(
   <div class="header-title" style="text-align:right;">
     <h1>Preventive Maintenance Checklist</h1>
     <h2>${config.name}</h2>
-    <p>${config.location} &nbsp;|&nbsp; ${config.pmName} &nbsp;|&nbsp; Mode: ${config.operationMode === 'RUNNING' ? 'Machine Running' : config.operationMode === 'LOCKOUT' ? 'Lockout / Tagout' : 'All Tasks'} &nbsp;|&nbsp; ${config.description || 'Growing Our Future — A Community Based Venture'}</p>
+    <p>${config.location.join(', ')} &nbsp;|&nbsp; ${config.pmName} &nbsp;|&nbsp; Mode: ${config.operationMode === 'RUNNING' ? 'Machine Running' : config.operationMode === 'LOCKOUT' ? 'Lockout / Tagout' : 'All Tasks'} &nbsp;|&nbsp; ${config.description || 'Growing Our Future — A Community Based Venture'}</p>
   </div>
 </div>
 
@@ -282,7 +315,7 @@ ${taskCols.length > 0 ? `
     </tr>
   </thead>
   <tbody>
-    ${activeRows || `<tr><td colspan="${taskCols.length + 3}" style="text-align:center;padding:10px;color:#888;">No active assets found for ${config.location} / ${config.assetType}</td></tr>`}
+    ${activeRows || `<tr><td colspan="${taskCols.length + 3}" style="text-align:center;padding:10px;color:#888;">No active assets found for ${config.location.join(', ')} / ${config.assetType}</td></tr>`}
     ${inactiveRows}
   </tbody>
 </table>

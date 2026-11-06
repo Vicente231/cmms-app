@@ -1,42 +1,33 @@
-import { useAuthStore } from '@/store/authStore'
+// Legacy GAS helpers — only used for Google Drive file operations (drawings, plat maps).
+// All database operations now go through Supabase (src/lib/supabase.ts).
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? '/api/v1'
+const GAS_URL = import.meta.env.VITE_API_URL ?? ''
 
-function getToken(): string | null {
-  return useAuthStore.getState().token
-}
-
-/** GET request — action + params as query string, no custom headers → no CORS preflight */
+/** GET to GAS (file-read operations only, no auth token) */
 export async function gasGet<T>(action: string, params: Record<string, string> = {}): Promise<T> {
-  const token = getToken()
-  const url = new URL(BASE_URL)
+  const url = new URL(GAS_URL)
   url.searchParams.set('action', action)
-  if (token) url.searchParams.set('token', token)
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v))
-
-  const res = await fetch(url.toString())
+  const res  = await fetch(url.toString())
   const data = await res.json()
   if (data.error) throw new Error(data.error)
   return data as T
 }
 
-/** POST request — action + token inside JSON body, Content-Type: text/plain → no CORS preflight */
+/** POST to GAS (file-upload operations only, no auth token) */
 export async function gasPost<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
-  const token = getToken()
-  const body: Record<string, unknown> = { action, ...payload }
-  if (token) body.token = token
-
-  const res = await fetch(BASE_URL, {
+  const res = await fetch(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ action, ...payload }),
   })
   const data = await res.json()
   if (data.error) throw new Error(data.error)
   return data as T
 }
 
-// ── GAS entity shapes ─────────────────────────────────────────────────────────
+// GAS row shapes — column names match Supabase table columns exactly.
+// Hooks import these types to keep mapXxx() functions unchanged.
 
 export interface GASUser {
   id: string
@@ -98,6 +89,8 @@ export interface GASWorkOrder {
   diagnosis: string
   corrective_action: string
   completion_notes: string
+  completion_image_urls?: string
+  completed_by?: string
   checklist: unknown[]
   project_id: string
   discipline: string
@@ -112,7 +105,7 @@ export interface GASMaintenanceTask {
   estimated_duration: string
   measurement_unit?: string
   pass_condition?: string
-  measurement_fields?: string  // comma-separated field labels e.g. "L1-GND,L2-GND,L3-GND"
+  measurement_fields?: string
 }
 
 export interface GASWorkOrderTask {
@@ -130,6 +123,7 @@ export interface GASWorkRequest {
   wr_id: string
   asset_id: string
   asset_name: string
+  asset_location: string
   description: string
   priority: string
   requested_by: string
@@ -138,6 +132,15 @@ export interface GASWorkRequest {
   converted_to_wo: string
   image_urls: string
   notes: string
+  department: string
+  contact_phone: string
+  request_type: string
+  failure_mode: string
+  machine_down: string | boolean
+  production_impact: string
+  safety_concern: string | boolean
+  safety_detail: string
+  preferred_date: string
 }
 
 export interface GASWorkRequestItem {
@@ -169,11 +172,14 @@ export interface GASPMSchedule {
   task_ids: string
 }
 
+export type AppliesTo = 'asset' | 'part' | 'both'
+
 export interface GASAssetType {
   type_code: string
   label: string
   icon: string
   color: string
+  applies_to?: AppliesTo
 }
 
 export interface GASAssetTypeSchema {
@@ -184,6 +190,9 @@ export interface GASAssetTypeSchema {
   unit: string
   required: boolean
   options: string[]
+  applies_to?: AppliesTo
+  section?: string
+  sort_order?: number
 }
 
 export interface GASPart {
@@ -201,6 +210,8 @@ export interface GASPart {
   supplier: string
   is_active: string | boolean
   notes: string
+  part_type?: string
+  attrs?: Record<string, unknown> | null
 }
 
 export interface GASInventoryTransaction {

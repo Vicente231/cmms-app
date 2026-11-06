@@ -1,10 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useWorkOrder, useWorkOrderTasks, useUpdateWorkOrderTask, useUpdateWorkOrder, useInitializeWOTasks } from '@/hooks/useWorkOrders'
 import { useMaintenanceTasks } from '@/hooks/usePMSchedules'
 import { useAsset } from '@/hooks/useAssets'
 import { useWOTransactions } from '@/hooks/useInventoryTransactions'
 import { useParts, useIssueStock } from '@/hooks/useParts'
+import { gasPost } from '@/lib/api'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ArrowLeft, CheckSquare, Square, Clock, Package, MapPin, Tag, Wrench, FolderKanban, Plus } from 'lucide-react'
+import { ArrowLeft, CheckSquare, Square, Clock, Package, MapPin, Tag, Wrench, FolderKanban, Plus, Camera, X, CheckCircle2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useToast } from '@/components/ui/use-toast'
 
@@ -51,6 +52,36 @@ function evalPassCondition(value: string, condition: string): boolean | null {
   }
 }
 
+async function compressToBase64(file: File, maxPx = 1024, quality = 0.72): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+      const w = Math.round(img.width * scale)
+      const h = Math.round(img.height * scale)
+      const canvas = document.createElement('canvas')
+      canvas.width = w; canvas.height = h
+      canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+      // Return only the base64 part (no data: prefix) for GAS upload
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1])
+    }
+    img.onerror = reject
+    img.src = url
+  })
+}
+
+async function uploadPhotoToDrive(file: File, prefix: string): Promise<string> {
+  const base64 = await compressToBase64(file)
+  const res = await gasPost<{ success: boolean; url: string; error?: string }>(
+    'uploadImage',
+    { base64, mimeType: 'image/jpeg', filename: `${prefix}_${Date.now()}.jpg` }
+  )
+  if (!res.success || !res.url) throw new Error(res.error ?? 'Upload failed')
+  return res.url
+}
+
 const WO_STATUSES = [
   { value: 'open',        label: 'Open' },
   { value: 'in_progress', label: 'In Progress' },
@@ -81,12 +112,22 @@ export function WorkOrderDetailPage() {
   const [issueQty,        setIssueQty]        = useState('1')
   const [issueNotes,      setIssueNotes]      = useState('')
 
+  // Completion modal state
+  const [completionModalOpen, setCompletionModalOpen] = useState(false)
+  const [completionForm, setCompletionForm] = useState({
+    actualHours: '',
+    completedBy: '',
+    completionNotes: '',
+  })
+  // Each entry is either a Drive URL (uploaded) or null (uploading)
+  const [completionPhotos, setCompletionPhotos] = useState<(string | null)[]>([])
+  const photoInputRef = useRef<HTMLInputElement>(null)
+
   const { data: woTxs = [] }   = useWOTransactions(wo?.woNumber ?? '')
   const { data: partsPage }    = useParts({ limit: 9999 })
   const issueStock             = useIssueStock()
   const allParts               = partsPage?.data ?? []
 
-  // Primary lookup by task_id, fallback by description (handles template_task_id mismatches)
   const mtByDesc = Object.fromEntries(
     allMTasks.map(t => [t.description?.toLowerCase().trim(), t])
   )
@@ -94,7 +135,6 @@ export function WorkOrderDetailPage() {
 
   const getMT = (task: typeof woTasks[0]) => {
     const byId   = mtById[task.templateTaskId]
-    // If found by ID and description matches, trust it; otherwise fall back to description match
     if (byId && byId.description?.toLowerCase().trim() === task.description?.toLowerCase().trim()) {
       return byId
     }
@@ -109,10 +149,10 @@ export function WorkOrderDetailPage() {
       : null,
   } : { measurementUnit: '', passCondition: '', measurementFields: null }
 
-  // Keep backward-compat alias used in render
   const mtMap = Object.fromEntries(
     allMTasks.map(t => [t.task_id, toMtFields(t)])
   )
+  void mtMap
 
   const toggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
@@ -142,12 +182,72 @@ export function WorkOrderDetailPage() {
 
   const handleStatusChange = async (status: string) => {
     if (!wo) return
+    if (status === 'completed') {
+      // Open completion modal instead of directly updating
+      setCompletionForm({ actualHours: wo.estimatedHours ? String(wo.estimatedHours) : '', completedBy: '', completionNotes: '' })
+      setCompletionPhotos([])
+      setCompletionModalOpen(true)
+      return
+    }
     setSavingStatus(true)
     try {
       await updateWO.mutateAsync({ id: wo.id, status: status as never })
       toast({ title: 'Status updated' })
     } catch {
       toast({ title: 'Error updating status', variant: 'destructive' })
+    } finally {
+      setSavingStatus(false)
+    }
+  }
+
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!wo) return
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    const remaining = 3 - completionPhotos.length
+    const toUpload = files.slice(0, remaining)
+    if (!toUpload.length) return
+    if (photoInputRef.current) photoInputRef.current.value = ''
+
+    // Reserve slots with null (shows spinner) then fill with Drive URLs
+    const startIdx = completionPhotos.length
+    setCompletionPhotos(prev => [...prev, ...toUpload.map(() => null)])
+
+    for (let i = 0; i < toUpload.length; i++) {
+      try {
+        const driveUrl = await uploadPhotoToDrive(toUpload[i], wo.woNumber ?? 'WO')
+        setCompletionPhotos(prev => {
+          const next = [...prev]
+          next[startIdx + i] = driveUrl
+          return next
+        })
+      } catch (err) {
+        toast({ title: `Photo ${i + 1} failed`, description: (err as Error).message, variant: 'destructive' })
+        setCompletionPhotos(prev => prev.filter((_, idx) => idx !== startIdx + i))
+      }
+    }
+  }
+
+  const uploadingPhotos = completionPhotos.some(p => p === null)
+
+  const submitCompletion = async () => {
+    if (!wo || uploadingPhotos) return
+    setSavingStatus(true)
+    try {
+      const uploadedUrls = completionPhotos.filter((p): p is string => p !== null)
+      await updateWO.mutateAsync({
+        id: wo.id,
+        status: 'completed' as never,
+        actualHours: completionForm.actualHours ? Number(completionForm.actualHours) : undefined,
+        completedBy: completionForm.completedBy || undefined,
+        completionNotes: completionForm.completionNotes || undefined,
+        completionImageUrls: uploadedUrls.length > 0 ? uploadedUrls : undefined,
+      })
+      toast({ title: 'Work Order completed', description: 'Completion report saved.' })
+      setCompletionModalOpen(false)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Failed to save'
+      toast({ title: 'Error', description: msg, variant: 'destructive' })
     } finally {
       setSavingStatus(false)
     }
@@ -189,7 +289,6 @@ export function WorkOrderDetailPage() {
             )}
           </div>
           <p className="text-sm text-muted-foreground truncate">{wo.title}</p>
-          {/* Discipline + project */}
           <div className="flex flex-wrap items-center gap-2 mt-1">
             {wo.discipline && (
               <Badge variant="outline" className="text-xs font-normal">{wo.discipline}</Badge>
@@ -204,7 +303,6 @@ export function WorkOrderDetailPage() {
               </button>
             )}
           </div>
-          {/* Asset quick-view strip */}
           <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
             <span className="flex items-center gap-1 text-foreground font-medium">
               <Wrench className="h-3.5 w-3.5 text-muted-foreground" />
@@ -296,9 +394,60 @@ export function WorkOrderDetailPage() {
                       <dd className="text-right">{value}</dd>
                     </div>
                   ) : null)}
+                  {wo.completedBy && (
+                    <div className="flex justify-between">
+                      <dt className="font-medium text-muted-foreground">Completed By</dt>
+                      <dd className="text-right">{wo.completedBy}</dd>
+                    </div>
+                  )}
                 </dl>
               </CardContent>
             </Card>
+
+            {/* Completion Report — shown only when WO is completed and has completion data */}
+            {wo.status === 'completed' && (wo.completionNotes || (wo.completionImageUrls?.length ?? 0) > 0) && (
+              <Card className="md:col-span-2 border-green-200 dark:border-green-800">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-green-700 dark:text-green-400">
+                    <CheckCircle2 className="h-5 w-5" />
+                    Completion Report
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {wo.completionNotes && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-1">What was done</p>
+                      <p className="text-sm whitespace-pre-wrap">{wo.completionNotes}</p>
+                    </div>
+                  )}
+                  {(wo.completionImageUrls?.length ?? 0) > 0 && (
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Photos</p>
+                      <div className="flex flex-wrap gap-2">
+                        {wo.completionImageUrls!.map((src, i) => {
+                          const match = src.match(/[?&]id=([^&]+)/)
+                          const thumbSrc = match ? `https://drive.google.com/thumbnail?id=${match[1]}&sz=w400` : src
+                          return (
+                            <a key={i} href={src} target="_blank" rel="noreferrer">
+                              <img
+                                src={thumbSrc}
+                                alt={`Completion photo ${i + 1}`}
+                                className="w-28 h-28 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                                onError={(e) => {
+                                  const el = e.currentTarget
+                                  el.style.display = 'none'
+                                  el.parentElement!.innerHTML = `<div class="w-28 h-28 rounded-lg border flex items-center justify-center bg-muted text-muted-foreground text-xs">No preview</div>`
+                                }}
+                              />
+                            </a>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Notes / Resolution */}
             <Card className="md:col-span-2">
@@ -681,6 +830,118 @@ export function WorkOrderDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ── Completion Modal ── */}
+      {completionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-background rounded-lg shadow-xl w-full max-w-lg p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-600" />
+                Report Completion
+              </h2>
+              <button onClick={() => setCompletionModalOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <p className="text-sm text-muted-foreground">
+              {wo.woNumber} — {wo.title}
+            </p>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Actual Hours Taken</label>
+                  <Input
+                    type="number" step="0.5" min="0" placeholder="e.g. 2.5"
+                    value={completionForm.actualHours}
+                    onChange={e => setCompletionForm(f => ({ ...f, actualHours: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Completed By</label>
+                  <Input
+                    placeholder="Technician name"
+                    value={completionForm.completedBy}
+                    onChange={e => setCompletionForm(f => ({ ...f, completedBy: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">What was done</label>
+                <Textarea
+                  rows={4}
+                  placeholder="Describe the work performed, findings, parts replaced, root cause…"
+                  value={completionForm.completionNotes}
+                  onChange={e => setCompletionForm(f => ({ ...f, completionNotes: e.target.value }))}
+                />
+              </div>
+
+              {/* Photo upload */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Photos (up to 3)</label>
+                <div className="flex flex-wrap gap-2 items-center">
+                  {completionPhotos.map((src, i) => (
+                    <div key={i} className="relative w-20 h-20">
+                      {src === null ? (
+                        // Uploading spinner
+                        <div className="w-20 h-20 rounded-lg border bg-muted flex items-center justify-center">
+                          <svg className="animate-spin h-5 w-5 text-muted-foreground" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                          </svg>
+                        </div>
+                      ) : (
+                        <>
+                          <img src={src} alt={`Photo ${i + 1}`} className="w-20 h-20 object-cover rounded-lg border" />
+                          <button
+                            onClick={() => setCompletionPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full w-5 h-5 flex items-center justify-center hover:bg-destructive/80"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {completionPhotos.length < 3 && (
+                    <button
+                      onClick={() => photoInputRef.current?.click()}
+                      disabled={uploadingPhotos}
+                      className="w-20 h-20 rounded-lg border-2 border-dashed border-muted-foreground/40 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:border-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
+                    >
+                      <Camera className="h-5 w-5" />
+                      <span className="text-xs">Add</span>
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handlePhotoSelect}
+                />
+                <p className="text-xs text-muted-foreground">Photos upload to Google Drive automatically.</p>
+              </div>
+            </div>
+
+            <div className="flex gap-2 justify-end pt-2 border-t">
+              <Button variant="outline" onClick={() => setCompletionModalOpen(false)}>Cancel</Button>
+              <Button
+                onClick={submitCompletion}
+                disabled={savingStatus || uploadingPhotos}
+                className="bg-green-600 hover:bg-green-700 text-white"
+              >
+                {savingStatus ? 'Saving…' : uploadingPhotos ? 'Uploading photos…' : 'Mark as Completed'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

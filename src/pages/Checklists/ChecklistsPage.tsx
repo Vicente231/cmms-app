@@ -19,7 +19,7 @@ import { format } from 'date-fns'
 type FormValues = {
   name: string
   pmId: string
-  location: string
+  locations: string[]
   operationMode: OperationMode
   description?: string
 }
@@ -28,19 +28,21 @@ type FormValues = {
 function ChecklistForm({
   allPMs,
   allTasks,
+  allAssets,
   locations,
   defaultValues,
   onSave,
 }: {
   allPMs: PmSchedule[]
   allTasks: GASMaintenanceTask[]
+  allAssets: import('@/types').Asset[]
   locations: string[]
   defaultValues: FormValues
   onSave: (data: FormValues, pm: PmSchedule) => void
 }) {
   const [name, setName] = useState(defaultValues.name)
   const [pmIdx, setPmIdx] = useState<string>('')           // index in allPMs array as string
-  const [location, setLocation] = useState(defaultValues.location)
+  const [selectedLocs, setSelectedLocs] = useState<string[]>(defaultValues.locations)
   const [mode, setMode] = useState<OperationMode>(defaultValues.operationMode)
   const [description, setDescription] = useState(defaultValues.description ?? '')
 
@@ -55,6 +57,28 @@ function ChecklistForm({
   const selectedPM = pmIdx !== '' ? allPMs[Number(pmIdx)] ?? null : null
   const pmTaskIds: string[] = selectedPM?.taskIds ?? []
   const pmTasks = allTasks.filter(t => pmTaskIds.includes(t.task_id))
+
+  // Locations where the selected PM's assets actually live
+  const pmAssetTags = selectedPM
+    ? (selectedPM.targetId ?? '').split(',').map(s => s.trim()).filter(Boolean)
+    : []
+  const pmLocations = pmAssetTags.length > 0
+    ? [...new Set(
+        allAssets
+          .filter(a => pmAssetTags.includes(a.assetTag ?? ''))
+          .map(a => (a.location as { name?: string })?.name ?? '')
+          .filter(Boolean)
+      )].sort()
+    : locations
+
+  // Live asset count for the selected PM + chosen locations
+  const liveAssetCount = selectedPM && selectedLocs.length > 0
+    ? allAssets.filter(a => {
+        const loc = (a.location as { name?: string })?.name ?? ''
+        if (!selectedLocs.some(sl => sl.trim().toLowerCase() === loc.trim().toLowerCase())) return false
+        return pmAssetTags.includes(a.assetTag ?? '')
+      }).length
+    : pmAssetTags.length
   const filteredTasks = pmTasks.filter(t => {
     if (mode === 'ALL') return true
     const s = (t.safety ?? '').toUpperCase()
@@ -68,8 +92,8 @@ function ChecklistForm({
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
-    if (!selectedPM || !name || !location) return
-    onSave({ name, pmId: String(selectedPM.id), location, operationMode: mode, description }, selectedPM)
+    if (!selectedPM || !name || selectedLocs.length === 0) return
+    onSave({ name, pmId: String(selectedPM.id), locations: selectedLocs, operationMode: mode, description }, selectedPM)
   }
 
   return (
@@ -104,7 +128,9 @@ function ChecklistForm({
           <div className="font-medium text-sm">{selectedPM.name}</div>
           <div className="text-muted-foreground">
             Every {selectedPM.frequencyValue} {selectedPM.frequencyUnit} &nbsp;·&nbsp;
-            {selectedPM.targetId?.split(',').length ?? 0} assets &nbsp;·&nbsp;
+            <span className={liveAssetCount === 0 ? 'text-orange-600 font-medium' : ''}>
+              {liveAssetCount} asset{liveAssetCount !== 1 ? 's' : ''}{selectedLocs.length > 0 ? ' at selected locations' : ' total'}
+            </span> &nbsp;·&nbsp;
             {pmTaskIds.length} tasks linked
           </div>
         </div>
@@ -138,14 +164,35 @@ function ChecklistForm({
       )}
 
       <div className="space-y-2">
-        <Label>Location (which assets to list) *</Label>
-        <Select value={location || undefined} onValueChange={setLocation}>
-          <SelectTrigger><SelectValue placeholder="Select location" /></SelectTrigger>
-          <SelectContent>
-            {locations.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">Lists all assets at this location that belong to the PM's group</p>
+        <Label>Locations (select one or more) *</Label>
+        <div className="max-h-36 overflow-y-auto rounded-md border p-2 space-y-1">
+          {(selectedPM ? pmLocations : locations).length === 0 ? (
+            <p className="text-xs text-muted-foreground py-1 px-1">
+              {selectedPM ? '⚠ No locations found — make sure the PM\'s assets have a location set.' : 'No locations available'}
+            </p>
+          ) : (selectedPM ? pmLocations : locations).map(l => (
+            <label key={l} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+              <input
+                type="checkbox"
+                checked={selectedLocs.includes(l)}
+                onChange={e => {
+                  if (e.target.checked) setSelectedLocs(prev => [...prev, l])
+                  else setSelectedLocs(prev => prev.filter(x => x !== l))
+                }}
+                className="accent-primary h-3.5 w-3.5"
+              />
+              <span className="text-sm">{l}</span>
+            </label>
+          ))}
+        </div>
+        {selectedLocs.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {selectedLocs.length} location{selectedLocs.length !== 1 ? 's' : ''} selected
+          </p>
+        )}
+        {selectedLocs.length === 0 && (selectedPM ? pmLocations : locations).length > 0 && (
+          <p className="text-xs text-orange-600">Select at least one location</p>
+        )}
       </div>
 
       <div className="space-y-2">
@@ -165,7 +212,7 @@ export function ChecklistsPage() {
   const [editConfig, setEditConfig] = useState<ChecklistConfig | null>(null)
   const [generating, setGenerating] = useState<string | null>(null)
   const [formKey, setFormKey] = useState(0)
-  const [formDefaults, setFormDefaults] = useState<FormValues>({ name: '', pmId: '', location: '', operationMode: 'ALL', description: '' })
+  const [formDefaults, setFormDefaults] = useState<FormValues>({ name: '', pmId: '', locations: [], operationMode: 'ALL', description: '' })
 
   const { data: assetsData } = useAssets('', 1, 9999)
   const { data: pmData } = usePMSchedules()
@@ -182,14 +229,14 @@ export function ChecklistsPage() {
 
   const openCreate = () => {
     setEditConfig(null)
-    setFormDefaults({ name: '', pmId: '', location: '', operationMode: 'ALL', description: '' })
+    setFormDefaults({ name: '', pmId: '', locations: [], operationMode: 'ALL', description: '' })
     setFormKey(k => k + 1)
     setModalOpen(true)
   }
 
   const openEdit = (c: ChecklistConfig) => {
     setEditConfig(c)
-    setFormDefaults({ name: c.name, pmId: c.pmId, location: c.location, operationMode: c.operationMode ?? 'ALL', description: c.description ?? '' })
+    setFormDefaults({ name: c.name, pmId: c.pmId, locations: Array.isArray(c.location) ? c.location : c.location ? [c.location] : [], operationMode: c.operationMode ?? 'ALL', description: c.description ?? '' })
     setFormKey(k => k + 1)
     setModalOpen(true)
   }
@@ -202,7 +249,7 @@ export function ChecklistsPage() {
       assetType: pm.targetType === 'asset_type' ? (pm.targetId ?? '') : '',
       pmTargetType: pm.targetType ?? 'group',
       pmTargetId: pm.targetId ?? '',
-      location: data.location,
+      location: data.locations,
       taskIds: pm.taskIds ?? [],
       operationMode: data.operationMode,
       description: data.description,
@@ -231,9 +278,10 @@ export function ChecklistsPage() {
         ? String(config.pmTargetId).split(',').map(s => s.trim()).filter(Boolean)
         : []
 
+      const locs = Array.isArray(config.location) ? config.location : config.location ? [config.location] : []
       const filteredAssets = allAssets.filter(a => {
         const loc = (a.location as { name?: string })?.name ?? ''
-        const locMatch = !config.location || loc.trim().toLowerCase() === config.location.trim().toLowerCase()
+        const locMatch = locs.length === 0 || locs.some(sl => loc.trim().toLowerCase() === sl.trim().toLowerCase())
         if (!locMatch) return false
         if (config.pmTargetType === 'asset_type') return (a.model ?? '') === config.assetType
         if (config.pmTargetType === 'group') return groupIds.includes(a.assetTag ?? '')
@@ -250,12 +298,13 @@ export function ChecklistsPage() {
   }
 
   const assetCountFor = (c: ChecklistConfig) => {
+    const locs = Array.isArray(c.location) ? c.location : c.location ? [c.location] : []
     const groupIds = c.pmTargetType === 'group'
       ? String(c.pmTargetId).split(',').map(s => s.trim()).filter(Boolean)
       : []
     return allAssets.filter(a => {
       const loc = (a.location as { name?: string })?.name ?? ''
-      const locMatch = loc.trim().toLowerCase() === c.location.trim().toLowerCase()
+      const locMatch = locs.length === 0 || locs.some(sl => loc.trim().toLowerCase() === sl.trim().toLowerCase())
       if (!locMatch) return false
       if (c.pmTargetType === 'asset_type') return (a.model ?? '') === c.assetType
       if (c.pmTargetType === 'group') return groupIds.includes(a.assetTag ?? '')
@@ -310,7 +359,9 @@ export function ChecklistsPage() {
               </div>
 
               <div className="flex flex-wrap gap-1.5">
-                <Badge variant="outline" className="text-xs">{c.location}</Badge>
+                {(Array.isArray(c.location) ? c.location : c.location ? [c.location] : []).map(l => (
+                  <Badge key={l} variant="outline" className="text-xs">{l}</Badge>
+                ))}
                 {c.assetType && <Badge variant="secondary" className="text-xs">{c.assetType}</Badge>}
                 {(c.operationMode ?? 'ALL') === 'RUNNING' && <Badge className="text-xs bg-green-700 text-white">Running</Badge>}
                 {(c.operationMode ?? 'ALL') === 'LOCKOUT' && <Badge className="text-xs bg-orange-600 text-white">LOTO</Badge>}
@@ -344,6 +395,7 @@ export function ChecklistsPage() {
             key={formKey}
             allPMs={allPMs}
             allTasks={allTasks}
+            allAssets={allAssets}
             locations={locations}
             defaultValues={formDefaults}
             onSave={handleSave}

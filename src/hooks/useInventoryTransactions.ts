@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { gasGet } from '@/lib/api'
-import type { GASInventoryTransaction } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 
 export interface UITransaction {
   id: string
@@ -17,20 +16,20 @@ export interface UITransaction {
   createdAt: string
 }
 
-function mapTx(t: GASInventoryTransaction): UITransaction {
+function mapTx(t: Record<string, unknown>): UITransaction {
   return {
-    id:          t.tx_id,
-    partId:      t.part_id,
-    partName:    t.part_name,
-    partNumber:  t.part_number,
-    txType:      (t.tx_type?.toUpperCase() as UITransaction['txType']) || 'ADJUSTED',
-    qty:         Number(t.qty) || 0,
-    unitCost:    Number(t.unit_cost) || 0,
+    id:           String(t.tx_id || ''),
+    partId:       String(t.part_id || ''),
+    partName:     String(t.part_name || ''),
+    partNumber:   String(t.part_number || ''),
+    txType:       (String(t.tx_type || '').toUpperCase() as UITransaction['txType']) || 'ADJUSTED',
+    qty:          Number(t.qty) || 0,
+    unitCost:     Number(t.unit_cost) || 0,
     balanceAfter: Number(t.balance_after) || 0,
-    woId:        t.wo_id || '',
-    reference:   t.reference || '',
-    notes:       t.notes || '',
-    createdAt:   t.created_at || '',
+    woId:         String(t.wo_id || ''),
+    reference:    String(t.reference || ''),
+    notes:        String(t.notes || ''),
+    createdAt:    String(t.created_at || ''),
   }
 }
 
@@ -38,10 +37,12 @@ const useAllTransactions = () =>
   useQuery({
     queryKey: ['inventory-transactions'],
     queryFn: async () => {
-      const rows = await gasGet<GASInventoryTransaction[]>('inventoryTransactions')
-      return rows.map(mapTx).sort((a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )
+      const { data, error } = await supabase
+        .from('inventory_transactions')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []).map(mapTx)
     },
   })
 

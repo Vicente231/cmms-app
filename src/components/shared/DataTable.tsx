@@ -26,6 +26,7 @@ interface DataTableProps<T> {
   onPageChange?: (page: number) => void
   total?: number
   extraActions?: React.ReactNode
+  mobileCard?: (row: T) => React.ReactNode
 }
 
 export function DataTable<T>({
@@ -42,6 +43,7 @@ export function DataTable<T>({
   onPageChange,
   total,
   extraActions,
+  mobileCard,
 }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([])
 
@@ -81,7 +83,25 @@ export function DataTable<T>({
         )}
       </div>
 
-      <div className="rounded-md border">
+      {/* Mobile card list — shown only when mobileCard prop is provided */}
+      {mobileCard && (
+        <div className="lg:hidden space-y-2">
+          {isLoading
+            ? Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-lg border bg-background p-4 space-y-2 animate-pulse">
+                  <div className="h-4 w-32 rounded bg-muted" />
+                  <div className="h-3 w-48 rounded bg-muted" />
+                  <div className="h-3 w-full rounded bg-muted" />
+                </div>
+              ))
+            : data.length === 0
+              ? <div className="rounded-lg border bg-background p-8 text-center text-sm text-muted-foreground">No records found.</div>
+              : data.map((row, i) => <div key={i}>{mobileCard(row)}</div>)
+          }
+        </div>
+      )}
+
+      <div className={`overflow-x-auto rounded-md border${mobileCard ? ' hidden lg:block' : ''}`}>
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (

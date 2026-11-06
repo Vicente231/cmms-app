@@ -26,6 +26,16 @@ import { cn } from '@/lib/utils'
 const NONE = '__none__'
 
 const statuses: WoStatus[]     = ['open', 'in_progress', 'on_hold', 'completed', 'cancelled']
+const PRIORITY_ORDER: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+
+const STATUS_TABS = [
+  { label: 'Open',        value: 'open'        },
+  { label: 'In Progress', value: 'in_progress' },
+  { label: 'On Hold',     value: 'on_hold'     },
+  { label: 'Completed',   value: 'completed'   },
+  { label: 'Cancelled',   value: 'cancelled'   },
+  { label: 'All',         value: 'all'         },
+]
 const priorities: WoPriority[] = ['low', 'medium', 'high', 'critical']
 
 const LOTO_SAFETY      = ['DE-ENERGIZED', 'LOCKOUT TAGOUT', 'HOT WORK', 'CONFINED SPACE']
@@ -39,7 +49,7 @@ export function WorkOrdersPage() {
   const { toast }  = useToast()
   const [page, setPage]               = useState(1)
   const [search, setSearch]           = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('')
+  const [statusFilter, setStatusFilter] = useState<string>('open')
   const projectFilter = searchParams.get('project') || ''
   const [modalOpen, setModalOpen]     = useState(false)
   const [deleteId, setDeleteId]       = useState<number | null>(null)
@@ -191,6 +201,10 @@ export function WorkOrdersPage() {
     catch { toast({ title: 'Error', variant: 'destructive' }) }
   }
 
+  const sortedWOs = [...(data?.data ?? [])].sort(
+    (a, b) => (PRIORITY_ORDER[b.priority] ?? 0) - (PRIORITY_ORDER[a.priority] ?? 0)
+  )
+
   const columns: ColumnDef<WorkOrder>[] = [
     { accessorKey: 'woNumber', header: 'WO #', cell: ({ row }) => <span className="font-mono text-sm font-medium">{row.original.woNumber}</span> },
     { accessorKey: 'title',    header: 'Title', cell: ({ row }) => <span className="max-w-xs truncate block">{row.original.title}</span> },
@@ -222,9 +236,33 @@ export function WorkOrdersPage() {
         <p className="text-muted-foreground">Manage maintenance work orders</p>
       </div>
 
+      {/* Status tab pills */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {STATUS_TABS.map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => { setStatusFilter(tab.value); setPage(1) }}
+            className={cn(
+              'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+              statusFilter === tab.value
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-muted-foreground/30 text-muted-foreground hover:border-foreground/50 hover:text-foreground'
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+        {projectFilter && (
+          <div className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs font-medium text-primary ml-2">
+            <span>Project: {projectFilter}</span>
+            <button onClick={() => setSearchParams({})} className="ml-0.5 hover:text-destructive transition-colors" title="Clear">✕</button>
+          </div>
+        )}
+      </div>
+
       <DataTable
         columns={columns}
-        data={data?.data || []}
+        data={sortedWOs}
         isLoading={isLoading}
         onAddNew={openCreate}
         addNewLabel="New Work Order"
@@ -235,27 +273,29 @@ export function WorkOrdersPage() {
         totalPages={data?.pagination.totalPages}
         onPageChange={setPage}
         total={data?.pagination.total}
-        extraActions={
-          <div className="flex items-center gap-2">
-            {projectFilter && (
-              <div className="flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/5 px-3 py-1 text-xs font-medium text-primary">
-                <span>Project: {projectFilter}</span>
-                <button
-                  onClick={() => setSearchParams({})}
-                  className="ml-0.5 hover:text-destructive transition-colors"
-                  title="Clear project filter"
-                >✕</button>
+        mobileCard={(wo) => {
+          const due = wo.dueDate
+          const overdue = due && isPast(new Date(due)) && !['completed', 'cancelled'].includes(wo.status)
+          return (
+            <button
+              onClick={() => navigate(`/work-orders/${wo.id}`)}
+              className="w-full text-left rounded-lg border bg-background p-4 space-y-2 hover:bg-accent/40 active:bg-accent/60 transition-colors"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-mono text-xs font-semibold text-muted-foreground">{wo.woNumber}</span>
+                <StatusBadge type="wo" value={wo.status} />
               </div>
-            )}
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40"><SelectValue placeholder="All statuses" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                {statuses.map((s) => <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-        }
+              <p className="font-semibold text-sm leading-tight line-clamp-2">{wo.title}</p>
+              {wo.asset?.name && <p className="text-xs text-muted-foreground">{wo.asset.name}</p>}
+              <div className="flex items-center gap-2 flex-wrap">
+                <StatusBadge type="priority" value={wo.priority} />
+                <span className={cn('ml-auto text-xs font-medium', overdue ? 'text-red-600' : 'text-muted-foreground')}>
+                  {due ? format(new Date(due), 'MMM d, yyyy') : '—'}
+                </span>
+              </div>
+            </button>
+          )
+        }}
       />
 
       <CRUDModal

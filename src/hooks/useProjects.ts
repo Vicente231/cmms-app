@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { gasGet, gasPost } from '@/lib/api'
+import { supabase } from '@/lib/supabase'
 import type { GASProject } from '@/lib/api'
 import type { Project, ProjectType, ProjectStatus, Discipline } from '@/types'
 
@@ -7,10 +7,10 @@ const KEY = 'projects'
 
 function mapProject(p: GASProject): Project {
   return {
-    id:          p.project_id,
-    name:        p.name,
-    type:        p.type as ProjectType,
-    status:      (p.status?.toLowerCase() || 'planning') as ProjectStatus,
+    id:           p.project_id,
+    name:         p.name,
+    type:         p.type as ProjectType,
+    status:       (p.status?.toLowerCase() || 'planning') as ProjectStatus,
     plannedStart: p.planned_start || '',
     plannedEnd:   p.planned_end   || '',
     actualStart:  p.actual_start  || '',
@@ -26,8 +26,9 @@ export const useProjects = () => {
   return useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASProject[]>('projects')
-      return rows.map(mapProject)
+      const { data, error } = await supabase.from('projects').select('*')
+      if (error) throw error
+      return (data ?? []).map(mapProject)
     },
   })
 }
@@ -36,8 +37,9 @@ export const useProject = (id: string) => {
   const query = useQuery({
     queryKey: [KEY],
     queryFn: async () => {
-      const rows = await gasGet<GASProject[]>('projects')
-      return rows.map(mapProject)
+      const { data, error } = await supabase.from('projects').select('*')
+      if (error) throw error
+      return (data ?? []).map(mapProject)
     },
     enabled: !!id,
   })
@@ -56,8 +58,16 @@ export type ProjectFormData = {
 export const useCreateProject = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (body: ProjectFormData) =>
-      gasPost<{ success: boolean; project_id: string }>('createProject', body),
+    mutationFn: async (body: ProjectFormData) => {
+      const { data, error } = await supabase.from('projects').insert({
+        ...body,
+        assets_scope: Array.isArray(body.assets_scope) ? body.assets_scope.join(',') : body.assets_scope,
+        status: 'planning',
+        created_at: new Date().toISOString().split('T')[0],
+      }).select('project_id').single()
+      if (error) throw error
+      return { success: true, project_id: data.project_id }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -65,8 +75,19 @@ export const useCreateProject = () => {
 export const useUpdateProject = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<ProjectFormData> & { status?: ProjectStatus; actual_start?: string; actual_end?: string } }) =>
-      gasPost<{ success: boolean }>('updateProject', { project_id: id, updates }),
+    mutationFn: async ({ id, updates }: {
+      id: string
+      updates: Partial<ProjectFormData> & { status?: ProjectStatus; actual_start?: string; actual_end?: string }
+    }) => {
+      const { error } = await supabase.from('projects').update({
+        ...updates,
+        assets_scope: Array.isArray(updates.assets_scope)
+          ? updates.assets_scope.join(',')
+          : updates.assets_scope,
+      }).eq('project_id', id)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }
@@ -74,8 +95,11 @@ export const useUpdateProject = () => {
 export const useDeleteProject = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) =>
-      gasPost<{ success: boolean }>('deleteProject', { project_id: id }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('projects').delete().eq('project_id', id)
+      if (error) throw error
+      return { success: true }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: [KEY] }),
   })
 }

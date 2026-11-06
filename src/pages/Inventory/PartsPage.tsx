@@ -9,8 +9,14 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/components/ui/use-toast'
 import type { Part } from '@/types'
 import { Pencil, Trash2, AlertTriangle, Plus, SlidersHorizontal, Search, Box, ArrowDownToLine } from 'lucide-react'
-import { useForm } from 'react-hook-form'
+import { useForm, Controller, useWatch } from 'react-hook-form'
 import { cn } from '@/lib/utils'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useEquipmentTypes } from '@/hooks/useEquipmentTypes'
+import { SpecFieldsEditor, missingRequired } from '@/components/shared/SpecFields'
+import { PartDetailSheet } from './PartDetailSheet'
+
+const NO_TYPE = '__none'
 
 type StockStatus = 'out' | 'low' | 'ok'
 
@@ -74,8 +80,14 @@ export function PartsPage() {
   const [deleteId,    setDeleteId]    = useState<number | null>(null)
   const [editPart,    setEditPart]    = useState<Part | null>(null)
   const [targetPart,  setTargetPart]  = useState<Part | null>(null)
+  const [viewPart,    setViewPart]    = useState<Part | null>(null)
+  const [typeFilter,  setTypeFilter]  = useState('')
+  const [attrs,       setAttrs]       = useState<Record<string, string>>({})
 
-  const { data: partsPage, isLoading } = useParts({ search, lowStock: lowOnly, limit: 9999 })
+  const { types: partTypes, fieldsFor } = useEquipmentTypes('part')
+  const typeLabel = (code?: string) => partTypes.find(t => t.type_code === code)?.label || code || ''
+
+  const { data: partsPage, isLoading } = useParts({ search, lowStock: lowOnly, partType: typeFilter, limit: 9999 })
   const allParts = partsPage?.data ?? []
 
   const create       = useCreatePart()
@@ -85,7 +97,9 @@ export function PartsPage() {
   const adjustStock  = useAdjustStock()
 
   // Part form
-  const { register: reg, handleSubmit: hs, reset } = useForm<PartFormData>()
+  const { register: reg, handleSubmit: hs, reset, control } = useForm<PartFormData>()
+  const formType   = useWatch({ control, name: 'part_type' }) || ''
+  const typeFields = fieldsFor(formType)
   // Receive form
   const { register: regR, handleSubmit: hsR, reset: rstR } = useForm<{ qty: number; unit_cost: number; reference: string; notes: string }>()
   // Adjust form
@@ -99,7 +113,7 @@ export function PartsPage() {
     }
   }, [allParts])
 
-  const openCreate = () => { setEditPart(null); reset({}); setModalOpen(true) }
+  const openCreate = () => { setEditPart(null); reset({ part_type: typeFilter }); setAttrs({}); setModalOpen(true) }
   const openEdit   = (p: Part) => {
     setEditPart(p)
     reset({
@@ -114,13 +128,27 @@ export function PartsPage() {
       max_qty:     p.reorderQuantity,
       location:    p.storageLocation,
       supplier:    p.preferredVendor?.name,
+      part_type:   p.partType || '',
     })
+    setAttrs(p.attrs ?? {})
     setModalOpen(true)
   }
   const openReceive = (p: Part) => { setTargetPart(p); rstR({ qty: 1, unit_cost: p.unitCost, reference: '', notes: '' }); setReceiveOpen(true) }
   const openAdjust  = (p: Part) => { setTargetPart(p); rstA({ newQty: p.quantityOnHand, notes: '' }); setAdjustOpen(true) }
 
-  const onPartSubmit = hs(async (data) => {
+  const onPartSubmit = hs(async (form) => {
+    const missing = missingRequired(typeFields, attrs)
+    if (missing.length) {
+      toast({ title: 'Required specs missing', description: missing.join(', '), variant: 'destructive' })
+      return
+    }
+    // Changing the type drops the old type's spec values; otherwise keep everything already stored
+    const keepAll = editPart && (editPart.partType || '') === (form.part_type || '')
+    const keys = new Set(typeFields.map(f => f.field_key))
+    const data = {
+      ...form,
+      attrs: keepAll ? attrs : Object.fromEntries(Object.entries(attrs).filter(([k]) => keys.has(k))),
+    }
     try {
       if (editPart) {
         await update.mutateAsync({ id: editPart.id, ...data })
@@ -130,7 +158,9 @@ export function PartsPage() {
         toast({ title: 'Part created' })
       }
       setModalOpen(false)
-    } catch { toast({ title: 'Error', variant: 'destructive' }) }
+    } catch (e) {
+      toast({ title: 'Error saving part', description: (e as { message?: string })?.message, variant: 'destructive' })
+    }
   })
 
   const onReceive = hsR(async (data) => {
@@ -200,11 +230,18 @@ export function PartsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="Search parts..."
+            placeholder="Search name, part #, specs…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
+        <Select value={typeFilter || NO_TYPE} onValueChange={v => setTypeFilter(v === NO_TYPE ? '' : v)}>
+          <SelectTrigger className="w-44 h-9"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NO_TYPE}>All types</SelectItem>
+            {partTypes.map(t => <SelectItem key={t.type_code} value={t.type_code}>{t.icon} {t.label}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Button
           variant={lowOnly ? 'default' : 'outline'}
           size="sm"
@@ -219,12 +256,54 @@ export function PartsPage() {
             </span>
           )}
         </Button>
-        {(search || lowOnly) && (
-          <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setLowOnly(false) }}>
+        {(search || lowOnly || typeFilter) && (
+          <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setLowOnly(false); setTypeFilter('') }}>
             Clear
           </Button>
         )}
       </div>
+
+      {/* Parts — mobile cards */}
+      {!isLoading && allParts.length > 0 && (
+        <div className="lg:hidden space-y-2">
+          {allParts.map(p => {
+            const status = getStatus(p.quantityOnHand, p.minimumQuantity)
+            return (
+              <div key={p.id} className="rounded-lg border bg-background p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="cursor-pointer" onClick={() => setViewPart(p)}>
+                    <p className="font-semibold text-sm hover:underline">{p.name}</p>
+                    {p.partNumber && <p className="font-mono text-xs text-muted-foreground">{p.partNumber}</p>}
+                  </div>
+                  <span className={cn('text-xs px-2 py-0.5 rounded border font-medium shrink-0', STATUS_STYLES[status])}>
+                    {STATUS_LABELS[status]}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <StockBar current={p.quantityOnHand} min={p.minimumQuantity} max={p.reorderQuantity} />
+                  <span className="text-xs text-muted-foreground">{p.unitOfMeasure}</span>
+                </div>
+                <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                  {p.partType && <span className="font-medium text-foreground">{typeLabel(p.partType)}</span>}
+                  {p.category?.name && <span>{p.category.name}</span>}
+                  {p.storageLocation && <span>{p.storageLocation}</span>}
+                  <span className="font-medium text-foreground">${Number(p.unitCost).toFixed(2)}/unit</span>
+                </div>
+                <div className="flex items-center gap-1 pt-1 border-t">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs flex-1 text-green-700" onClick={() => openReceive(p)}>
+                    <ArrowDownToLine className="h-3.5 w-3.5 mr-1" />Receive
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 text-xs flex-1 text-blue-700" onClick={() => openAdjust(p)}>
+                    <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />Adjust
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDeleteId(p.id)}><Trash2 className="h-3.5 w-3.5 text-destructive" /></Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Parts table */}
       {isLoading ? (
@@ -234,17 +313,17 @@ export function PartsPage() {
           <CardContent className="py-16 text-center">
             <Box className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
             <p className="text-muted-foreground text-sm">
-              {search || lowOnly ? 'No parts match the current filters' : 'No parts in catalog yet. Add your first part.'}
+              {search || lowOnly || typeFilter ? 'No parts match the current filters' : 'No parts in catalog yet. Add your first part.'}
             </p>
           </CardContent>
         </Card>
       ) : (
-        <Card>
+        <Card className="hidden lg:block">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="border-b bg-muted/30">
                 <tr>
-                  {['Part #', 'Name', 'Category', 'Location', 'Stock', 'Min / Max', 'Unit Cost', 'Supplier', ''].map(h => (
+                  {['Part #', 'Name', 'Type / Category', 'Location', 'Stock', 'Min / Max', 'Unit Cost', 'Supplier', ''].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -255,11 +334,14 @@ export function PartsPage() {
                   return (
                     <tr key={p.id} className="hover:bg-muted/20 transition-colors">
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{p.partNumber || '—'}</td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium">{p.name}</div>
+                      <td className="px-4 py-3 cursor-pointer" onClick={() => setViewPart(p)}>
+                        <div className="font-medium hover:underline">{p.name}</div>
                         {p.description && <div className="text-xs text-muted-foreground truncate max-w-[200px]">{p.description}</div>}
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{p.category?.name || '—'}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.partType && <div className="font-medium">{typeLabel(p.partType)}</div>}
+                        <div className="text-xs text-muted-foreground">{p.category?.name || (p.partType ? '' : '—')}</div>
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{p.storageLocation || '—'}</td>
                       <td className="px-4 py-3">
                         <div className="flex flex-col gap-1">
@@ -297,7 +379,7 @@ export function PartsPage() {
             </table>
           </div>
           <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-            {allParts.length} part{allParts.length !== 1 ? 's' : ''} {lowOnly || search ? 'matching filters' : 'in catalog'}
+            {allParts.length} part{allParts.length !== 1 ? 's' : ''} {lowOnly || search || typeFilter ? 'matching filters' : 'in catalog'}
           </div>
         </Card>
       )}
@@ -319,6 +401,22 @@ export function PartsPage() {
           <div className="space-y-2">
             <Label>Part Number</Label>
             <Input {...reg('part_number')} placeholder="SKU or manufacturer P/N" />
+          </div>
+          <div className="space-y-2">
+            <Label>Type <span className="text-xs text-muted-foreground">(sets the spec fields)</span></Label>
+            <Controller
+              control={control}
+              name="part_type"
+              render={({ field }) => (
+                <Select value={field.value || NO_TYPE} onValueChange={v => field.onChange(v === NO_TYPE ? '' : v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_TYPE}>— No type —</SelectItem>
+                    {partTypes.map(t => <SelectItem key={t.type_code} value={t.type_code}>{t.icon} {t.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+            />
           </div>
           <div className="space-y-2">
             <Label>Category</Label>
@@ -356,6 +454,11 @@ export function PartsPage() {
             <Label>Description / Notes</Label>
             <Input {...reg('description')} placeholder="Additional details, specs, cross-references..." />
           </div>
+          {typeFields.length > 0 && (
+            <div className="col-span-2 rounded-lg border p-4 bg-muted/20">
+              <SpecFieldsEditor fields={typeFields} values={attrs} onChange={setAttrs} />
+            </div>
+          )}
         </div>
       </CRUDModal>
 
@@ -416,6 +519,8 @@ export function PartsPage() {
           </div>
         </div>
       </CRUDModal>
+
+      <PartDetailSheet part={viewPart} onClose={() => setViewPart(null)} onEdit={openEdit} />
 
       <ConfirmDialog
         open={!!deleteId}

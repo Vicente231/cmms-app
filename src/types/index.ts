@@ -28,6 +28,7 @@ export interface WorkRequest {
   id: string
   assetId: string
   assetName: string
+  assetLocation: string
   description: string
   priority: WoPriority
   requestedBy: string
@@ -36,6 +37,16 @@ export interface WorkRequest {
   convertedToWo: string
   imageUrls: string[]
   notes: string
+  // Classification
+  department: string
+  contactPhone: string
+  requestType: string        // 'corrective' | 'emergency' | 'safety' | 'improvement' | 'other'
+  failureMode: string        // 'mechanical' | 'electrical' | 'hydraulic' | 'pneumatic' | 'structural' | 'instrumentation' | 'other'
+  machineDown: boolean
+  productionImpact: string   // 'none' | 'minor' | 'major' | 'full_stoppage'
+  safetyConcern: boolean
+  safetyDetail: string
+  preferredDate: string
 }
 
 export interface WorkRequestItem {
@@ -262,6 +273,9 @@ export interface WorkOrder {
   checklistTaskIds?: string[]
   projectId?: string
   discipline?: string
+  completionNotes?: string
+  completionImageUrls?: string[]
+  completedBy?: string
   tasks?: WoTask[]
   labor?: WoLabor[]
   partsUsed?: WoPartsUsed[]
@@ -406,6 +420,9 @@ export interface Part {
   reorderQuantity: number
   storageLocation?: string
   barcode?: string
+  partId?: string
+  partType?: string
+  attrs?: Record<string, string>
   isActive: boolean
   createdAt: string
   updatedAt: string
@@ -497,6 +514,78 @@ export interface Attachment {
   uploadedBy?: number
   uploader?: { id: number; firstName: string; lastName: string }
   createdAt: string
+}
+
+export interface AssetDrawing {
+  drawingId: string
+  assetId: string
+  drawingName: string
+  revision: string
+  fileType: 'pdf' | 'dwg'
+  driveFileId: string
+  driveUrl: string
+  uploadedDate: string
+}
+
+// ── Predictive Maintenance ─────────────────────────────────────────────────
+
+export interface AssetMeasurement {
+  measurementId: string
+  assetId: string       // e.g. "AST-000004"
+  paramName: string     // e.g. "vibration", "temperature"
+  value: number
+  unit: string          // e.g. "mm/s", "°C", "MΩ"
+  notes: string
+  recordedBy: string
+  recordedAt: string
+}
+
+export interface AssetThreshold {
+  thresholdId: string
+  assetType: string     // asset type code, e.g. "MOT"
+  paramName: string
+  warningValue: number
+  criticalValue: number
+  unit: string
+  direction: 'above' | 'below'
+}
+
+export type HealthStatus = 'ok' | 'warning' | 'critical' | 'unknown'
+
+export interface ParamHealth {
+  paramName: string
+  value: number
+  unit: string
+  recordedAt: string
+  status: HealthStatus
+  warningValue?: number
+  criticalValue?: number
+  direction?: 'above' | 'below'
+}
+
+export interface AssetHealth {
+  assetId: string
+  overallStatus: HealthStatus
+  params: ParamHealth[]
+}
+
+// ── Plat View ──────────────────────────────────────────────────────────────
+
+export interface PlatMap {
+  mapId: string
+  mapName: string
+  driveFileId: string
+  driveUrl: string
+  uploadedDate: string
+}
+
+export interface PlatPin {
+  pinId: string
+  mapId: string
+  assetId: string   // e.g. "AST-000004"
+  xPct: number      // 0–100, % from left of image
+  yPct: number      // 0–100, % from top of image
+  label: string
 }
 
 export interface WorkOrderTask {

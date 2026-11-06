@@ -11,7 +11,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate } from 'react-router-dom'
-import { gasPost } from '@/lib/api'
 
 interface TopbarProps {
   onMenuToggle: () => void
@@ -22,8 +21,7 @@ export function Topbar({ onMenuToggle }: TopbarProps) {
   const navigate = useNavigate()
 
   const handleLogout = async () => {
-    try { await gasPost('logout') } catch { /* ignore */ }
-    logout()
+    await logout()
     navigate('/login')
   }
 
